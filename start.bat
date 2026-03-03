@@ -12,7 +12,7 @@ cd /d "%~dp0backend"
 echo  Checking Python...
 python --version 2>NUL
 if errorlevel 1 (
-    echo  [ERROR] Python not found. Please install Python 3.11+ (64-bit).
+    echo  [ERROR] Python not found. Please install Python 3.11+ ^(64-bit^).
     echo          https://www.python.org/downloads/
     pause
     exit /b 1
