@@ -206,9 +206,7 @@ h1 {
 .logbook-table thead {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: var(--header-h);
-  z-index: 10;
+  position: static;
 }
 
 .logbook-table th {
