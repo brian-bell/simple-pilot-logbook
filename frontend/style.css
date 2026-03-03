@@ -1,0 +1,454 @@
+/* ==========================================================================
+   Simple Pilot Logbook — Stylesheet
+   Orthogonal design: sharp edges, grid layout, monospace numbers.
+   ========================================================================== */
+
+:root {
+  --bg:           #0f1117;
+  --surface:      #161a24;
+  --surface-alt:  #1c2030;
+  --border:       #252a3a;
+  --border-light: #2e3448;
+  --accent:       #4f9ef8;
+  --accent-dim:   #3a7acc;
+  --text:         #d6dce8;
+  --text-muted:   #6b7592;
+  --text-dim:     #8890a8;
+  --green:        #3ecf8e;
+  --yellow:       #f5c542;
+  --red:          #f05252;
+  --banner-bg:    #0d1e38;
+  --banner-border:#1e4080;
+  --font-mono:    "Cascadia Mono", "Fira Mono", "Consolas", "Menlo", monospace;
+  --font-ui:      "Segoe UI", "Inter", system-ui, sans-serif;
+  --header-h:     52px;
+  --banner-h:     48px;
+}
+
+/* --------------------------------------------------------------------------
+   Reset & base
+   -------------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.hidden { display: none !important; }
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--header-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-icon {
+  font-size: 20px;
+  color: var(--accent);
+}
+
+h1 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.4s;
+}
+
+.status-dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.disconnected { background: var(--red); }
+.status-dot.airborne     { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+/* --------------------------------------------------------------------------
+   Active flight banner
+   -------------------------------------------------------------------------- */
+
+.active-banner {
+  background: var(--banner-bg);
+  border-bottom: 1px solid var(--banner-border);
+  padding: 0 24px;
+  height: var(--banner-h);
+  display: flex;
+  align-items: center;
+}
+
+.banner-row {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.banner-segment {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.banner-key {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.banner-segment strong {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.banner-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.banner-arrow {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Main content
+   -------------------------------------------------------------------------- */
+
+.main-content {
+  padding: 20px 24px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Toolbar
+   -------------------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.toolbar-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.flight-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Logbook table
+   -------------------------------------------------------------------------- */
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+
+.logbook-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.logbook-table thead {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: static;
+}
+
+.logbook-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.logbook-table th:last-child { border-right: none; }
+.logbook-table th.num       { text-align: right; }
+
+.logbook-table th.sortable {
+  cursor: pointer;
+}
+
+.logbook-table th.sortable:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.logbook-table th.sort-asc  .sort-icon::after { content: " ▲"; }
+.logbook-table th.sort-desc .sort-icon::after { content: " ▼"; }
+
+.logbook-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.logbook-table tbody tr:nth-child(even) {
+  background: var(--surface-alt);
+}
+
+.logbook-table tbody tr:hover {
+  background: #1e2438;
+  cursor: pointer;
+}
+
+.logbook-table td {
+  padding: 10px 14px;
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.logbook-table td:last-child { border-right: none; }
+
+/* Numeric columns — right-aligned, monospace */
+.logbook-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Route column — combine from/to visually */
+.route-from { color: var(--text); font-family: var(--font-mono); }
+.route-to   { color: var(--text); font-family: var(--font-mono); }
+.route-arrow { color: var(--text-muted); margin: 0 4px; }
+
+/* Aircraft cell */
+.aircraft-title {
+  font-size: 12px;
+  color: var(--text-dim);
+  display: block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aircraft-reg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Landing quality badges */
+.vs-smooth { color: var(--green); }
+.vs-firm   { color: var(--yellow); }
+.vs-hard   { color: var(--red); font-weight: 600; }
+
+/* Date cell */
+.date-date { display: block; font-family: var(--font-mono); font-size: 12px; }
+.date-time { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+/* Delete button */
+.btn-delete {
+  background: none;
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 11px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-delete:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* --------------------------------------------------------------------------
+   Empty state
+   -------------------------------------------------------------------------- */
+
+.empty-state {
+  text-align: center;
+  padding: 80px 24px;
+  color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 16px;
+  opacity: 0.3;
+}
+
+.empty-state p { margin-bottom: 6px; }
+
+.empty-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* --------------------------------------------------------------------------
+   Modal
+   -------------------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  width: min(580px, 95vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.modal-close:hover { color: var(--text); }
+
+.modal-body {
+  padding: 20px;
+}
+
+/* Detail grid */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+.detail-cell {
+  background: var(--surface);
+  padding: 10px 14px;
+}
+
+.detail-cell:nth-child(odd) { background: var(--surface-alt); }
+
+.detail-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.detail-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.detail-section {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 16px 0 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .logbook-table th.hide-md,
+  .logbook-table td.hide-md { display: none; }
+}
+
+@media (max-width: 640px) {
+  .app-header   { padding: 0 12px; }
+  .main-content { padding: 12px; }
+  .active-banner { padding: 0 12px; }
+
+  .logbook-table th.hide-sm,
+  .logbook-table td.hide-sm { display: none; }
+
+  .detail-grid { grid-template-columns: 1fr; }
+}
