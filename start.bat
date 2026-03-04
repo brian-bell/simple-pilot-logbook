@@ -13,7 +13,7 @@ cd /d "%~dp0frontend"
 echo  Checking Node.js...
 node --version 2>NUL
 if errorlevel 1 (
-    echo  [ERROR] Node.js not found. Please install Node.js 18+.
+    echo  [ERROR] Node.js not found. Please install Node.js 24+.
     echo          https://nodejs.org/
     pause
     exit /b 1
