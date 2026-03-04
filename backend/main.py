@@ -136,8 +136,12 @@ def api_create_flight(data: FlightCreate):
 # Static frontend – mount last so API routes take priority
 # ---------------------------------------------------------------------------
 
+_frontend_build = Path(__file__).parent.parent / "frontend" / "dist" / "client"
 _frontend_dir = Path(__file__).parent.parent / "frontend"
-if _frontend_dir.exists():
+
+if _frontend_build.exists():
+    app.mount("/", StaticFiles(directory=str(_frontend_build), html=True), name="static")
+elif _frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="static")
 else:
     logger.warning("frontend/ directory not found – static files will not be served.")

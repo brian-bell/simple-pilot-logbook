@@ -1,0 +1,26 @@
+{
+  "name": "pilot-logbook-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 3000",
+    "build": "vite build && node -e \"require('fs').copyFileSync('dist/client/_shell.html','dist/client/index.html')\"",
+    "start": "node .output/server/index.mjs"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-router": "^1.163.3",
+    "@tanstack/react-start": "^1.166.1",
+    "@tanstack/react-table": "^8.21.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3",
+    "vite-tsconfig-paths": "^6.1.1"
+  }
+}

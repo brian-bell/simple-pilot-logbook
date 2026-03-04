@@ -7,6 +7,28 @@ echo   Simple Pilot Logbook
 echo  ====================================================
 echo.
 
+REM -- Build frontend --
+cd /d "%~dp0frontend"
+
+echo  Checking Node.js...
+node --version 2>NUL
+if errorlevel 1 (
+    echo  [ERROR] Node.js not found. Please install Node.js 18+.
+    echo          https://nodejs.org/
+    pause
+    exit /b 1
+)
+
+echo  Installing frontend dependencies...
+call npm install --silent
+
+echo  Building frontend...
+call npm run build
+if errorlevel 1 (
+    echo  [WARNING] Frontend build failed. Continuing without built frontend.
+)
+
+REM -- Start backend --
 cd /d "%~dp0backend"
 
 echo  Checking Python...
@@ -18,7 +40,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo  Installing dependencies...
+echo  Installing backend dependencies...
 python -m pip install -r requirements.txt --quiet
 
 echo  Starting server on http://localhost:8080

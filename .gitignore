@@ -48,6 +48,13 @@ backend/*.db-shm
 *.swp
 *.swo
 
+# Node.js / Frontend
+node_modules/
+frontend/.output/
+frontend/dist/
+frontend/src/routeTree.gen.ts
+*.tsbuildinfo
+
 # OS files
 .DS_Store
 Thumbs.db
