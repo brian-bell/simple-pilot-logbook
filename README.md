@@ -27,6 +27,34 @@ A lightweight web application that automatically records your Microsoft Flight S
 2. Double-click **`start.bat`** — it installs dependencies and opens the logbook in your browser automatically.
 3. Load any aircraft in MSFS, take off, fly, and land — the flight will appear in the logbook after touchdown.
 
+## Install As A Windows Service
+
+If you want the app to start automatically when Windows boots:
+
+1. Open **PowerShell as Administrator**.
+2. Run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install_service.ps1
+```
+
+This script will:
+- install backend dependencies
+- install `pywin32`
+- register the `SimplePilotLogbook` Windows service
+- set it to start automatically at boot
+- start the service immediately
+
+After install, open [http://localhost:8080](http://localhost:8080).
+
+To remove the service later:
+
+```powershell
+py -3 .\backend\windows_service.py stop
+py -3 .\backend\windows_service.py remove
+```
+
 ## Manual Start
 
 ```bat
@@ -54,6 +82,7 @@ simple-pilot-logbook/
 │   ├── style.css
 │   └── app.js
 ├── start.bat                    # Windows one-click launcher
+├── install_service.ps1          # Windows service installer
 └── README.md
 ```
 
