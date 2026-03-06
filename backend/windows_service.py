@@ -57,7 +57,7 @@ class SimplePilotLogbookService(win32serviceutil.ServiceFramework):
         os.chdir(ROOT_DIR)
         config = uvicorn.Config(
             app=app,
-            host="0.0.0.0",
+            host="127.0.0.1",
             port=8080,
             log_level="info",
         )
@@ -68,6 +68,15 @@ class SimplePilotLogbookService(win32serviceutil.ServiceFramework):
 
         win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
         server_thread.join(timeout=30)
+        if server_thread.is_alive():
+            servicemanager.LogWarningMsg(
+                "Simple Pilot Logbook service: uvicorn server thread did not terminate "
+                "within 30 seconds during shutdown; server may be in an inconsistent state."
+            )
+        else:
+            servicemanager.LogInfoMsg(
+                "Simple Pilot Logbook service: uvicorn server thread stopped gracefully."
+            )
 
 
 if __name__ == "__main__":
