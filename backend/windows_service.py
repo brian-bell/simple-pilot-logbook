@@ -11,6 +11,8 @@ import os
 import socket
 import sys
 import threading
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 import servicemanager
@@ -22,11 +24,22 @@ import win32serviceutil
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent
+SERVICE_LOG_PATH = BACKEND_DIR / "service.log"
 
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from main import app  # noqa: E402
+
+def log_service_message(message: str) -> None:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with SERVICE_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{timestamp}] {message}\n")
+
+
+def load_app():
+    from main import app
+
+    return app
 
 
 class SimplePilotLogbookService(win32serviceutil.ServiceFramework):
@@ -45,38 +58,58 @@ class SimplePilotLogbookService(win32serviceutil.ServiceFramework):
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         servicemanager.LogInfoMsg("Stopping Simple Pilot Logbook service.")
+        log_service_message("Stopping service.")
         if self.server is not None:
             self.server.should_exit = True
         win32event.SetEvent(self.stop_event)
 
     def SvcDoRun(self):
         servicemanager.LogInfoMsg("Starting Simple Pilot Logbook service.")
+        log_service_message("Starting service.")
         self.main()
 
     def main(self):
-        os.chdir(ROOT_DIR)
-        config = uvicorn.Config(
-            app=app,
-            host="127.0.0.1",
-            port=8080,
-            log_level="info",
-        )
-        self.server = uvicorn.Server(config)
-
-        server_thread = threading.Thread(target=self.server.run, daemon=True)
-        server_thread.start()
-
-        win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
-        server_thread.join(timeout=30)
-        if server_thread.is_alive():
-            servicemanager.LogWarningMsg(
-                "Simple Pilot Logbook service: uvicorn server thread did not terminate "
-                "within 30 seconds during shutdown; server may be in an inconsistent state."
+        try:
+            os.chdir(ROOT_DIR)
+            app = load_app()
+            config = uvicorn.Config(
+                app=app,
+                host="127.0.0.1",
+                port=8080,
+                log_level="info",
+                use_colors=False,
             )
-        else:
-            servicemanager.LogInfoMsg(
-                "Simple Pilot Logbook service: uvicorn server thread stopped gracefully."
-            )
+            self.server = uvicorn.Server(config)
+
+            server_thread = threading.Thread(target=self.server.run, daemon=True)
+            server_thread.start()
+            log_service_message("Uvicorn server thread started.")
+
+            while True:
+                wait_result = win32event.WaitForSingleObject(self.stop_event, 1000)
+                if wait_result == win32event.WAIT_OBJECT_0:
+                    break
+                if not server_thread.is_alive():
+                    raise RuntimeError(
+                        "Uvicorn server thread exited unexpectedly during service startup. "
+                        f"See {SERVICE_LOG_PATH} for details."
+                    )
+
+            server_thread.join(timeout=30)
+            if server_thread.is_alive():
+                warning = (
+                    "Uvicorn server thread did not terminate within 30 seconds during "
+                    "shutdown; server may be in an inconsistent state."
+                )
+                servicemanager.LogWarningMsg(warning)
+                log_service_message(warning)
+            else:
+                log_service_message("Uvicorn server thread stopped gracefully.")
+        except Exception:
+            details = traceback.format_exc()
+            log_service_message("Service startup failed:\n" + details)
+            servicemanager.LogErrorMsg(details)
+            raise
 
 
 if __name__ == "__main__":
