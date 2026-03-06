@@ -1,79 +1,71 @@
 # AGENTS.md
 
 ## Purpose
-This document gives coding agents a fast, reliable way to work in this repository without breaking core behavior.
+Use this file for repository-specific rules that help coding agents make safe changes quickly.
 
-## Project Summary
+## Project Snapshot
 - App: `Simple Pilot Logbook`
-- Goal: Automatically log Microsoft Flight Simulator flights (takeoff to landing) and display them in a web UI.
-- Runtime model: FastAPI backend serves REST API and static frontend; background thread polls SimConnect.
+- Goal: detect MSFS flights automatically and display them in a local web UI
+- Runtime: FastAPI serves the API and static frontend; `SimConnectWorker` runs in a background thread
+- Primary platform: Windows 10/11 for live SimConnect integration
 
-## Tech Stack
-- Backend: Python 3.11+, FastAPI, Uvicorn, SimConnect, SQLite
-- Frontend: Vanilla HTML/CSS/JavaScript (no build step)
-- OS assumptions: Windows 10/11 for live SimConnect integration
-
-## Repository Layout
-- `backend/main.py`: FastAPI app, API routes, static mount, worker lifecycle
-- `backend/simconnect_worker.py`: flight state machine and SimConnect polling thread
-- `backend/database.py`: SQLite schema and CRUD helpers (`backend/logbook.db`)
+## Key Files
+- `backend/main.py`: FastAPI app, API routes, frontend static mount, lifespan hooks
+- `backend/simconnect_worker.py`: SimConnect polling loop and flight state machine
+- `backend/database.py`: SQLite schema and CRUD helpers using short-lived connections
 - `backend/airports.py`: nearest-airport lookup and haversine helpers
-- `backend/data/airports.json`: airport dataset
-- `frontend/index.html`, `frontend/style.css`, `frontend/app.js`: UI
-- `start.bat`: one-click local start on Windows
+- `frontend/index.html`, `frontend/style.css`, `frontend/app.js`: vanilla frontend
+- `start.bat`: local launcher
+- `install_service.ps1`, `uninstall_service.ps1`, `backend/windows_service.py`: Windows service tooling
+- `docs/service-install.md`: service install, update, and removal steps
 
-## Run and Setup
-- Preferred quick start:
-  - `start.bat`
-- Manual start:
-  - `cd backend`
-  - `python -m pip install -r requirements.txt`
-  - `python -m uvicorn main:app --host 0.0.0.0 --port 8080`
-- App URL: `http://localhost:8080`
-
-## Agent Workflow Expectations
-- Keep changes minimal and focused on the request.
-- Preserve API shapes unless the task explicitly asks for API changes.
-- If changing API responses, update frontend usage in `frontend/app.js` in the same task.
-- Avoid adding new frameworks or build tooling unless explicitly requested.
-- Prefer small, readable functions over abstraction-heavy refactors.
+## Working Rules
+- Keep changes minimal and scoped to the request.
+- Preserve API response shapes unless the task explicitly requires API changes.
+- If backend API behavior changes, update `frontend/app.js` in the same task.
+- Do not add frameworks, build tooling, or major abstractions unless explicitly requested.
+- Prefer small readable functions over broad refactors.
 
 ## Backend Guardrails
-- `SimConnectWorker` is a daemon thread started/stopped via FastAPI lifespan; preserve this lifecycle.
-- Keep database access thread-safe: follow the current pattern of short-lived SQLite connections.
-- Maintain current flight-state behavior unless explicitly asked:
-  - states: `DISCONNECTED -> ON_GROUND -> AIRBORNE`
-  - ignore flights shorter than 30 seconds
-  - derive landing VS from recent trailing samples
-- Treat SimConnect availability as optional on unsupported hosts (offline mode should still allow historical logbook access).
+- Preserve the FastAPI lifespan startup/shutdown flow.
+- `SimConnectWorker` must remain a daemon thread started and stopped through app lifecycle hooks.
+- Keep SQLite access thread-safe by following the current short-lived connection pattern.
+- Preserve current flight-state behavior unless the user asks for a behavior change:
+  - `DISCONNECTED -> ON_GROUND -> AIRBORNE`
+  - flights shorter than 30 seconds are ignored
+  - landing vertical speed is derived from trailing samples
+- Treat SimConnect as optional. Offline mode must still allow historical logbook access.
 
 ## Frontend Guardrails
-- Stay dependency-free (vanilla JS/CSS/HTML).
-- Keep table sorting, status polling, modal details, and delete behavior intact.
-- Escape user/sim-provided strings before injecting into HTML.
-- Maintain responsive behavior for both desktop and mobile.
+- Keep the frontend dependency-free.
+- Preserve status polling, sorting, modal details, and delete behavior.
+- Escape user- or sim-provided strings before injecting into HTML.
+- Maintain usable desktop and mobile layouts.
 
-## Data and Compatibility
-- SQLite file is local: `backend/logbook.db`.
-- `date` values are ISO-style strings; avoid schema changes unless requested.
-- Preserve compatibility with existing records when possible.
+## Data And Compatibility
+- Local database path: `backend/logbook.db`
+- `date` values are ISO-style strings
+- Avoid schema changes unless requested
+- Preserve compatibility with existing logbook records when possible
 
-## Testing and Validation
-No formal automated test suite is currently defined. After code changes, validate manually:
-1. Start server and confirm `GET /api/status` and `GET /api/flights` return 200.
-2. Confirm frontend loads and table renders.
+## Validation
+There is no formal automated test suite. After code changes, validate what applies:
+1. Start the app and confirm `GET /api/status` and `GET /api/flights` return 200.
+2. Confirm the frontend loads and renders flights.
 3. Confirm sorting, modal open/close, and deletion still work.
-4. If touching worker logic, verify offline mode still behaves gracefully when MSFS/SimConnect is unavailable.
+4. If worker logic changed, verify offline behavior when MSFS/SimConnect is unavailable.
+5. If service tooling changed, follow `docs/service-install.md` and verify install/update/remove behavior.
 
-## Non-Goals (unless requested)
-- Migrating to a JS framework
-- Replacing SQLite
-- Large UI redesigns
-- Major architecture rewrites
+## Non-Goals
+Do not do these unless explicitly requested:
+- migrate to a JS framework
+- replace SQLite
+- redesign the UI broadly
+- rewrite the app architecture
 
 ## Change Notes
-When making significant edits, include a brief summary of:
+For significant edits, report:
 - files changed
 - behavior changed
-- manual validation performed
-- any limitations or follow-ups
+- validation performed
+- limitations or follow-ups

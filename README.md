@@ -27,6 +27,25 @@ A lightweight web application that automatically records your Microsoft Flight S
 2. Double-click **`start.bat`** — it installs dependencies and opens the logbook in your browser automatically.
 3. Load any aircraft in MSFS, take off, fly, and land — the flight will appear in the logbook after touchdown.
 
+## Install As A Windows Service
+
+See [docs/service-install.md](docs/service-install.md) for the full install, update, and uninstall workflow.
+
+Primary install command:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install_service.ps1 -PythonCommand "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
+```
+
+Primary uninstall command:
+
+```powershell
+.\uninstall_service.ps1 -PythonCommand "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
+```
+
+If service startup fails, check `backend/service.log` for the Python traceback.
+
 ## Manual Start
 
 ```bat
@@ -54,6 +73,8 @@ simple-pilot-logbook/
 │   ├── style.css
 │   └── app.js
 ├── start.bat                    # Windows one-click launcher
+├── install_service.ps1          # Windows service installer
+├── uninstall_service.ps1        # Windows service uninstaller
 └── README.md
 ```
 
@@ -121,3 +142,11 @@ AIRBORNE     ──landing──▶ ON_GROUND  (records: arrival coords, peak de
 
 **Port 8080 already in use**
 - Change the port: `python -m uvicorn main:app --port 8181` and update the `start.bat` accordingly.
+
+
+
+
+
+
+
+
