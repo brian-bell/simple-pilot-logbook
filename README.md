@@ -29,31 +29,22 @@ A lightweight web application that automatically records your Microsoft Flight S
 
 ## Install As A Windows Service
 
-If you want the app to start automatically when Windows boots:
+See [docs/service-install.md](docs/service-install.md) for the full install, update, and uninstall workflow.
 
-1. Open **PowerShell as Administrator**.
-2. Run:
+Primary install command:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\install_service.ps1
+.\install_service.ps1 -PythonExe "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
 ```
 
-This script will:
-- install backend dependencies
-- install `pywin32`
-- register the `SimplePilotLogbook` Windows service
-- set it to start automatically at boot
-- start the service immediately
-
-After install, open [http://localhost:8080](http://localhost:8080).
-
-To remove the service later:
+Primary uninstall command:
 
 ```powershell
-py -3 .\backend\windows_service.py stop
-py -3 .\backend\windows_service.py remove
+.\uninstall_service.ps1 -PythonExe "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
 ```
+
+If service startup fails, check `backend/service.log` for the Python traceback.
 
 ## Manual Start
 
@@ -83,6 +74,7 @@ simple-pilot-logbook/
 │   └── app.js
 ├── start.bat                    # Windows one-click launcher
 ├── install_service.ps1          # Windows service installer
+├── uninstall_service.ps1        # Windows service uninstaller
 └── README.md
 ```
 
@@ -150,3 +142,10 @@ AIRBORNE     ──landing──▶ ON_GROUND  (records: arrival coords, peak de
 
 **Port 8080 already in use**
 - Change the port: `python -m uvicorn main:app --port 8181` and update the `start.bat` accordingly.
+
+
+
+
+
+
+
