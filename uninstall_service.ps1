@@ -1,5 +1,5 @@
 param(
-    [string]$PythonExe = ""
+    [string]$PythonCommand = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,7 +81,7 @@ function Invoke-PythonCommand {
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $repoRoot "backend"
 $serviceScript = Join-Path $backendDir "windows_service.py"
-$pythonCmd = Get-PythonCommand -Preferred $PythonExe
+$pythonCmd = Get-PythonCommand -Preferred $PythonCommand
 $pythonCmdDisplay = $pythonCmd -join " "
 $serviceExists = $null -ne (Get-Service -Name "SimplePilotLogbook" -ErrorAction SilentlyContinue)
 
@@ -112,3 +112,4 @@ Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "remove")
 Write-Step "Done"
 Write-Host "Removed service : SimplePilotLogbook"
 Write-Host "Command used    : $pythonCmdDisplay"
+

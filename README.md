@@ -35,13 +35,13 @@ Primary install command:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\install_service.ps1 -PythonExe "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
+.\install_service.ps1 -PythonCommand "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
 ```
 
 Primary uninstall command:
 
 ```powershell
-.\uninstall_service.ps1 -PythonExe "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
+.\uninstall_service.ps1 -PythonCommand "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
 ```
 
 If service startup fails, check `backend/service.log` for the Python traceback.
@@ -142,6 +142,7 @@ AIRBORNE     ──landing──▶ ON_GROUND  (records: arrival coords, peak de
 
 **Port 8080 already in use**
 - Change the port: `python -m uvicorn main:app --port 8181` and update the `start.bat` accordingly.
+
 
 
 

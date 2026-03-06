@@ -12,7 +12,7 @@ From the repository root:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\install_service.ps1 -PythonExe "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
+.\install_service.ps1 -PythonCommand "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
 ```
 
 What the script does:
@@ -29,7 +29,7 @@ After install, open [http://localhost:8080](http://localhost:8080).
 From the repository root:
 
 ```powershell
-.\uninstall_service.ps1 -PythonExe "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
+.\uninstall_service.ps1 -PythonCommand "C:\Users\bellb\AppData\Local\Programs\Python\Python311\python.exe"
 ```
 
 What the script does:
@@ -46,5 +46,6 @@ What the script does:
 ```
 
 ## Notes
-- The install and uninstall scripts accept `-PythonExe` so they can target the same interpreter used to install dependencies.
+- The install and uninstall scripts accept `-PythonCommand` so they can target the same interpreter used to install dependencies.
 - A missing `pywin32_postinstall` entrypoint is treated as a warning, not a fatal error.
+

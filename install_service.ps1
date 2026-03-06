@@ -1,5 +1,5 @@
 param(
-    [string]$PythonExe = ""
+    [string]$PythonCommand = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -140,7 +140,7 @@ else:
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $repoRoot "backend"
 $serviceScript = Join-Path $backendDir "windows_service.py"
-$pythonCmd = Get-PythonCommand -Preferred $PythonExe
+$pythonCmd = Get-PythonCommand -Preferred $PythonCommand
 $pythonCmdDisplay = $pythonCmd -join " "
 $serviceExists = $null -ne (Get-Service -Name "SimplePilotLogbook" -ErrorAction SilentlyContinue)
 
@@ -183,3 +183,4 @@ Write-Host "App URL      : http://localhost:8080"
 Write-Host "Service log  : $(Join-Path $backendDir 'service.log')"
 Write-Host "Remove later : $pythonCmdDisplay $serviceScript stop"
 Write-Host "               $pythonCmdDisplay $serviceScript remove"
+
