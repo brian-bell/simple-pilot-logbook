@@ -53,6 +53,7 @@ class SimplePilotLogbookService(win32serviceutil.ServiceFramework):
         super().__init__(args)
         self.stop_event = win32event.CreateEvent(None, 0, 0, None)
         self.server: uvicorn.Server | None = None
+        self.server_thread: threading.Thread | None = None
         socket.setdefaulttimeout(60)
 
     def SvcStop(self):
@@ -81,30 +82,28 @@ class SimplePilotLogbookService(win32serviceutil.ServiceFramework):
             )
             self.server = uvicorn.Server(config)
 
-            server_thread = threading.Thread(target=self.server.run, daemon=True)
-            server_thread.start()
+            self.server_thread = threading.Thread(target=self.server.run)
+            self.server_thread.start()
             log_service_message("Uvicorn server thread started.")
 
             while True:
                 wait_result = win32event.WaitForSingleObject(self.stop_event, 1000)
                 if wait_result == win32event.WAIT_OBJECT_0:
                     break
-                if not server_thread.is_alive():
+                if not self.server_thread.is_alive():
                     raise RuntimeError(
                         "Uvicorn server thread exited unexpectedly during service startup. "
                         f"See {SERVICE_LOG_PATH} for details."
                     )
 
-            server_thread.join(timeout=30)
-            if server_thread.is_alive():
-                warning = (
-                    "Uvicorn server thread did not terminate within 30 seconds during "
-                    "shutdown; server may be in an inconsistent state."
+            while self.server_thread.is_alive():
+                self.ReportServiceStatus(
+                    win32service.SERVICE_STOP_PENDING,
+                    waitHint=5000,
                 )
-                servicemanager.LogWarningMsg(warning)
-                log_service_message(warning)
-            else:
-                log_service_message("Uvicorn server thread stopped gracefully.")
+                self.server_thread.join(timeout=1)
+
+            log_service_message("Uvicorn server thread stopped gracefully.")
         except Exception:
             details = traceback.format_exc()
             log_service_message("Service startup failed:\n" + details)
