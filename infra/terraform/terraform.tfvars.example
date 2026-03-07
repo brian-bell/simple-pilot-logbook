@@ -1,0 +1,5 @@
+do_token        = "dop_v1_example"
+bucket_name     = "simple-pilot-logbook-backups"
+region          = "nyc3"
+bucket_acl      = "private"
+spaces_key_name = "simple-pilot-logbook-backups"

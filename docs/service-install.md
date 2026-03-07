@@ -48,4 +48,6 @@ What the script does:
 ## Notes
 - The install and uninstall scripts accept `-PythonCommand` so they can target the same interpreter used to install dependencies.
 - A missing `pywin32_postinstall` entrypoint is treated as a warning, not a fatal error.
+- The backup worker runs inside the same Windows service process as the FastAPI app.
+- If you point local backups at a OneDrive-synced `Documents` folder, run the service under a Windows account that can access that folder. The default `LocalSystem` account typically will not have access to a personal OneDrive path.
 

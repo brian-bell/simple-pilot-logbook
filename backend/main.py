@@ -17,6 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from backup_config import load_backup_settings
+from backup_worker import BackupWorker
 from database import init_db, insert_flight, get_flights, get_flight, delete_flight, get_flight_count
 from simconnect_worker import SimConnectWorker
 
@@ -31,6 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _worker = SimConnectWorker()
+_backup_worker = BackupWorker(load_backup_settings())
 
 
 @asynccontextmanager
@@ -39,7 +42,15 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialised.")
     _worker.start()
     logger.info("SimConnect worker started.")
+    if _backup_worker.is_enabled():
+        _backup_worker.start()
+        logger.info("Backup worker started.")
+    else:
+        logger.info("Backup worker disabled by configuration.")
     yield
+    if _backup_worker.is_enabled():
+        _backup_worker.stop()
+        logger.info("Backup worker stopped.")
     _worker.stop()
     logger.info("SimConnect worker stopped.")
 

@@ -46,6 +46,39 @@ Primary uninstall command:
 
 If service startup fails, check `backend/service.log` for the Python traceback.
 
+## Backup Configuration
+
+The backend can create append-only SQLite backups once more than 24 hours have
+passed since the last successful backup for each target. Old backups are
+deleted after 30 days by default.
+
+Supported targets:
+
+- local folder backup, defaulting to `~/Documents/SimplePilotLogbook/backups`
+- DigitalOcean Spaces backup via S3-compatible uploads
+
+Configuration is done with environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LOGBOOK_BACKUP_LOCAL_ENABLED` | `true` | Enable local folder backups |
+| `LOGBOOK_BACKUP_LOCAL_DIR` | `~/Documents/SimplePilotLogbook/backups` | Local backup directory |
+| `LOGBOOK_BACKUP_SPACES_ENABLED` | `false` | Enable DigitalOcean Spaces backups |
+| `LOGBOOK_BACKUP_SPACES_BUCKET` |  | Spaces bucket name |
+| `LOGBOOK_BACKUP_SPACES_REGION` | `nyc3` | Spaces region, also used for the endpoint |
+| `LOGBOOK_BACKUP_SPACES_KEY` |  | Spaces access key ID |
+| `LOGBOOK_BACKUP_SPACES_SECRET` |  | Spaces secret key |
+| `LOGBOOK_BACKUP_SPACES_PREFIX` | `logbook-backups` | Object prefix inside the bucket |
+| `LOGBOOK_BACKUP_RETENTION_DAYS` | `30` | Retention window for old backups |
+| `LOGBOOK_BACKUP_CHECK_INTERVAL_SECONDS` | `3600` | How often the app checks whether a backup is due |
+| `LOGBOOK_BACKUP_FILENAME_PREFIX` | `logbook` | Prefix for backup filenames |
+
+The backup worker runs inside the existing FastAPI process. If you install the
+app as a Windows service, the backup checks run inside that same service.
+
+For Terraform scaffolding of the Spaces bucket and access key, see
+[infra/terraform/README.md](infra/terraform/README.md).
+
 ## Manual Start
 
 ```bat

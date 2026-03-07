@@ -42,6 +42,13 @@ backend/*.db-shm
 *.tmp
 *.bak
 
+# Terraform local state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!infra/terraform/terraform.tfvars.example
+
 # IDE/editor files
 .vscode/
 .idea/
