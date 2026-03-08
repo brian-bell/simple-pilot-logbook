@@ -17,6 +17,9 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `frontend/index.html`, `frontend/style.css`, `frontend/app.js`: vanilla frontend
 - `start.bat`: local launcher
 - `install_service.ps1`, `uninstall_service.ps1`, `backend/windows_service.py`: Windows service tooling
+- `backend/secrets_store.py`: read secrets from Windows Credential Manager (keyring) with env-var fallback
+- `manage_secrets.py`: CLI helper to set/get/delete/list secrets in the credential store
+- `docs/adrs/001-secret-management.md`: ADR for secret management approach
 - `docs/service-install.md`: service install, update, and removal steps
 
 ## Working Rules

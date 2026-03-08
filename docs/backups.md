@@ -10,6 +10,12 @@ DigitalOcean Spaces bucket. Each target is checked independently:
 The app uses SQLite's online backup API to create a consistent snapshot before
 copying or uploading it.
 
+## Credentials
+
+`LOGBOOK_BACKUP_SPACES_KEY` and `LOGBOOK_BACKUP_SPACES_SECRET` are read from
+Windows Credential Manager first, falling back to environment variables. See
+[secret-management.md](secret-management.md) for how to store them.
+
 ## Environment Variables
 
 Set these before starting the app or Windows service:
