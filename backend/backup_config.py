@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from secrets_store import get_secret
+
 
 def _read_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -78,7 +80,7 @@ def load_backup_settings() -> BackupSettings:
         spaces_enabled=_read_bool("LOGBOOK_BACKUP_SPACES_ENABLED", False),
         spaces_bucket=os.getenv("LOGBOOK_BACKUP_SPACES_BUCKET", "").strip(),
         spaces_region=os.getenv("LOGBOOK_BACKUP_SPACES_REGION", "nyc3").strip() or "nyc3",
-        spaces_access_key_id=os.getenv("LOGBOOK_BACKUP_SPACES_KEY", "").strip(),
-        spaces_secret_access_key=os.getenv("LOGBOOK_BACKUP_SPACES_SECRET", "").strip(),
+        spaces_access_key_id=get_secret("LOGBOOK_BACKUP_SPACES_KEY").strip(),
+        spaces_secret_access_key=get_secret("LOGBOOK_BACKUP_SPACES_SECRET").strip(),
         spaces_prefix=os.getenv("LOGBOOK_BACKUP_SPACES_PREFIX", "logbook-backups").strip(),
     )

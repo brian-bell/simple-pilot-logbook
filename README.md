@@ -57,7 +57,12 @@ Supported targets:
 - local folder backup, defaulting to `~/Documents/SimplePilotLogbook/backups`
 - DigitalOcean Spaces backup via S3-compatible uploads
 
-Configuration is done with environment variables:
+Sensitive credentials (`LOGBOOK_BACKUP_SPACES_KEY` and
+`LOGBOOK_BACKUP_SPACES_SECRET`) are read from Windows Credential Manager
+first, falling back to environment variables. See
+[docs/secret-management.md](docs/secret-management.md) for setup details.
+
+Non-secret options are configured with environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -66,8 +71,8 @@ Configuration is done with environment variables:
 | `LOGBOOK_BACKUP_SPACES_ENABLED` | `false` | Enable DigitalOcean Spaces backups |
 | `LOGBOOK_BACKUP_SPACES_BUCKET` |  | Spaces bucket name |
 | `LOGBOOK_BACKUP_SPACES_REGION` | `nyc3` | Spaces region, also used for the endpoint |
-| `LOGBOOK_BACKUP_SPACES_KEY` |  | Spaces access key ID |
-| `LOGBOOK_BACKUP_SPACES_SECRET` |  | Spaces secret key |
+| `LOGBOOK_BACKUP_SPACES_KEY` |  | Spaces access key ID (prefer credential store) |
+| `LOGBOOK_BACKUP_SPACES_SECRET` |  | Spaces secret key (prefer credential store) |
 | `LOGBOOK_BACKUP_SPACES_PREFIX` | `logbook-backups` | Object prefix inside the bucket |
 | `LOGBOOK_BACKUP_RETENTION_DAYS` | `30` | Retention window for old backups |
 | `LOGBOOK_BACKUP_CHECK_INTERVAL_SECONDS` | `3600` | How often the app checks whether a backup is due |
@@ -98,6 +103,7 @@ simple-pilot-logbook/
 │   ├── database.py              # SQLite init and CRUD helpers
 │   ├── simconnect_worker.py     # Background thread — flight state machine
 │   ├── airports.py              # Haversine distance + nearest-airport lookup
+│   ├── secrets_store.py          # Read secrets from Windows Credential Manager
 │   ├── requirements.txt
 │   └── data/
 │       └── airports.json        # ~29 k airports (mwgg/Airports, open data)
@@ -105,6 +111,7 @@ simple-pilot-logbook/
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
+├── manage_secrets.py             # CLI to set/get/delete/list credential store secrets
 ├── start.bat                    # Windows one-click launcher
 ├── install_service.ps1          # Windows service installer
 ├── uninstall_service.ps1        # Windows service uninstaller

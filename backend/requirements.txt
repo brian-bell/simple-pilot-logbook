@@ -2,3 +2,4 @@ fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 SimConnect>=0.4.2
 boto3>=1.34.0
+keyring>=25.0.0
