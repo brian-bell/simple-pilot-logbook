@@ -18,13 +18,14 @@ A lightweight web application that automatically records your Microsoft Flight S
 |---|---|
 | Windows 10/11 | SimConnect only runs on Windows |
 | Python 3.11+ **64-bit** | 32-bit Python will fail to load SimConnect.dll |
+| Node.js 18+ | Required to build the React frontend when `frontend/dist` is missing or when frontend source changes |
 | Microsoft Flight Simulator 2020 or 2024 | Must be running for live data collection |
 | SimConnect SDK | Included with MSFS; no extra install needed |
 
 ## Quick Start
 
 1. **Clone or download** this repository.
-2. Double-click **`start.bat`** — it installs dependencies and opens the logbook in your browser automatically.
+2. Double-click **`start.bat`** — it installs Python dependencies, builds the frontend if needed, and opens the logbook in your browser automatically.
 3. Load any aircraft in MSFS, take off, fly, and land — the flight will appear in the logbook after touchdown.
 
 ## Install As A Windows Service
@@ -49,7 +50,11 @@ If service startup fails, check `backend/service.log` for the Python traceback.
 ## Manual Start
 
 ```bat
-cd backend
+cd frontend
+npm install
+npm run build
+
+cd ..\backend
 pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 8080
 ```
@@ -69,9 +74,10 @@ simple-pilot-logbook/
 │   └── data/
 │       └── airports.json        # ~29 k airports (mwgg/Airports, open data)
 ├── frontend/
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
+│   ├── src/                     # React + TanStack Query frontend source
+│   ├── index.html              # Vite entry HTML
+│   ├── style.css               # Shared app styles
+│   └── package.json
 ├── start.bat                    # Windows one-click launcher
 ├── install_service.ps1          # Windows service installer
 ├── uninstall_service.ps1        # Windows service uninstaller
@@ -84,11 +90,23 @@ All endpoints are served from the same origin as the frontend.
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/api/config` | Frontend bootstrap config, including GraphQL endpoint settings |
 | `GET` | `/api/status` | SimConnect state + current flight (if airborne) |
 | `GET` | `/api/flights` | Paginated flight list (`?limit=&offset=`) |
 | `GET` | `/api/flights/{id}` | Single flight detail |
 | `POST` | `/api/flights` | Manually add a flight entry (JSON body) |
 | `DELETE` | `/api/flights/{id}` | Delete a flight entry |
+
+## GraphQL Frontend Configuration
+
+The React frontend fetches persisted flight data from a GraphQL service when one is configured. The backend exposes the client bootstrap payload through `GET /api/config`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LOGBOOK_GRAPHQL_URL` | unset | GraphQL endpoint used for persisted flight queries |
+| `LOGBOOK_GRAPHQL_BEARER_TOKEN` | unset | Optional bearer token forwarded to the frontend client bootstrap; only use a browser-safe token |
+| `LOGBOOK_GRAPHQL_HEADERS_JSON` | unset | Optional JSON object of extra GraphQL headers |
+| `LOGBOOK_GRAPHQL_USE_LOCAL_FALLBACK` | `true` | Allow flight list reads to fall back to the local REST API if GraphQL is unavailable |
 
 ### `POST /api/flights` body
 
@@ -142,11 +160,6 @@ AIRBORNE     ──landing──▶ ON_GROUND  (records: arrival coords, peak de
 
 **Port 8080 already in use**
 - Change the port: `python -m uvicorn main:app --port 8181` and update the `start.bat` accordingly.
-
-
-
-
-
 
 
 

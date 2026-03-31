@@ -48,6 +48,9 @@ backend/*.db-shm
 *.swp
 *.swo
 
+# Frontend dependencies
+frontend/node_modules/
+
 # OS files
 .DS_Store
 Thumbs.db

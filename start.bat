@@ -7,6 +7,36 @@ echo   Simple Pilot Logbook
 echo  ====================================================
 echo.
 
+set "ROOT_DIR=%~dp0"
+set "FRONTEND_DIR=%ROOT_DIR%frontend"
+set "FRONTEND_DIST=%FRONTEND_DIR%\dist\index.html"
+
+if not exist "%FRONTEND_DIST%" (
+    echo  Frontend build not found. Attempting to build it...
+    where npm >NUL 2>NUL
+    if errorlevel 1 (
+        echo  [WARN] npm not found. The backend will start, but the web UI will not load
+        echo         until you build the frontend in "%FRONTEND_DIR%".
+    ) else (
+        pushd "%FRONTEND_DIR%"
+        call npm install
+        if errorlevel 1 (
+            echo  [ERROR] Frontend dependency install failed.
+            popd
+            pause
+            exit /b 1
+        )
+        call npm run build
+        if errorlevel 1 (
+            echo  [ERROR] Frontend build failed.
+            popd
+            pause
+            exit /b 1
+        )
+        popd
+    )
+)
+
 cd /d "%~dp0backend"
 
 echo  Checking Python...

@@ -7,7 +7,9 @@ Run from the backend/ directory:
     uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 """
 
+import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -86,6 +88,38 @@ class FlightCreate(BaseModel):
     notes: Optional[str] = None
 
 
+def _parse_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _graphql_headers() -> dict[str, str]:
+    raw_headers = os.getenv("LOGBOOK_GRAPHQL_HEADERS_JSON", "").strip()
+    headers: dict[str, str] = {}
+    if raw_headers:
+        try:
+            parsed = json.loads(raw_headers)
+            if isinstance(parsed, dict):
+                headers.update(
+                    {
+                        str(key): str(value)
+                        for key, value in parsed.items()
+                        if value is not None
+                    }
+                )
+            else:
+                logger.warning("LOGBOOK_GRAPHQL_HEADERS_JSON must decode to an object.")
+        except json.JSONDecodeError:
+            logger.warning("LOGBOOK_GRAPHQL_HEADERS_JSON is not valid JSON.")
+
+    bearer_token = os.getenv("LOGBOOK_GRAPHQL_BEARER_TOKEN", "").strip()
+    if bearer_token and "Authorization" not in headers:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+
+    return headers
+
+
 # ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
@@ -95,6 +129,23 @@ class FlightCreate(BaseModel):
 def api_status():
     """Return SimConnect connection status and current flight data if airborne."""
     return _worker.get_status()
+
+
+@app.get("/api/config")
+def api_config():
+    """Return frontend bootstrap config for the GraphQL flight service."""
+    graphql_url = os.getenv("LOGBOOK_GRAPHQL_URL", "").strip()
+    return {
+        "graphql": {
+            "enabled": bool(graphql_url),
+            "url": graphql_url or None,
+            "headers": _graphql_headers(),
+            "use_local_fallback": _parse_bool(
+                os.getenv("LOGBOOK_GRAPHQL_USE_LOCAL_FALLBACK"),
+                default=True,
+            ),
+        }
+    }
 
 
 @app.get("/api/flights")
@@ -136,8 +187,10 @@ def api_create_flight(data: FlightCreate):
 # Static frontend – mount last so API routes take priority
 # ---------------------------------------------------------------------------
 
-_frontend_dir = Path(__file__).parent.parent / "frontend"
+_frontend_dir = Path(__file__).parent.parent / "frontend" / "dist"
 if _frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="static")
 else:
-    logger.warning("frontend/ directory not found – static files will not be served.")
+    logger.warning(
+        "frontend/dist directory not found – run the frontend build before serving static files."
+    )
