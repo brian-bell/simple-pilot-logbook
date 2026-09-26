@@ -30,7 +30,7 @@ All commands below run from the `worker/` directory.
    npx wrangler d1 create simple-pilot-logbook
    ```
 
-   Replace `REPLACE_WITH_DATABASE_ID` in `worker/wrangler.jsonc` with the printed `database_id`.
+   Replace the existing `database_id` value in `worker/wrangler.jsonc` with the printed one. The committed id belongs to the maintainer's database; deploying with it will fail or target the wrong database.
 
 4. Apply the schema:
 

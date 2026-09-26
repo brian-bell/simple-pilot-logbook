@@ -15,7 +15,7 @@
   },
 
   // Create with:  npx wrangler d1 create simple-pilot-logbook
-  // then paste the printed database_id below.
+  // then replace the database_id below (the maintainer's) with the printed one.
   "d1_databases": [
     {
       "binding": "DB",

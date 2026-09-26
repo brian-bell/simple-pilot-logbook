@@ -156,6 +156,14 @@ class Sender(threading.Thread):
             # error page) says nothing about the events: treat it as transient below.
 
         if status == 413:
+            if len(batch) == 1:
+                # Cannot split further: quarantine it so it stops blocking the queue.
+                self.outbox.mark_dead(seqs, text or "payload too large")
+                logger.error(
+                    "Event %s is too large for the Worker (HTTP 413). Dead-lettered.",
+                    batch[0].event_id,
+                )
+                return 0.0
             self._batch_size = max(1, self._batch_size // 2)
             self.outbox.fail(seqs, text)
             logger.warning("Batch too large (HTTP 413); reducing batch size to %d.", self._batch_size)
