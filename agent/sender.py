@@ -141,18 +141,19 @@ class Sender(threading.Thread):
         if 200 <= status < 300:
             self.outbox.ack(seqs)
             self._consecutive_failures = 0
+            # Grow back towards the configured size after a 413 or a rejected-batch shrink.
+            self._batch_size = min(self.cfg.batch_size, max(1, self._batch_size * 2))
             logger.info("Delivered %d event(s): %s", len(events), _summarise(events))
             return 0.0
 
         self._consecutive_failures += 1
 
         if status in (400, 422):
-            self.outbox.mark_dead(seqs, text)
-            logger.error(
-                "Worker rejected batch as invalid (HTTP %d): %s. Dead-lettered event ids: %s",
-                status, text[:300], ", ".join(row.event_id for row in batch),
-            )
-            return 0.0
+            error_body = _worker_error_body(text)
+            if error_body is not None:
+                return self._handle_rejected(batch, status, text, error_body)
+            # A 400 that is not the Worker's JSON error (proxy, captive portal, edge
+            # error page) says nothing about the events: treat it as transient below.
 
         if status == 413:
             self._batch_size = max(1, self._batch_size // 2)
@@ -175,6 +176,62 @@ class Sender(threading.Thread):
             f"HTTP {status}" if status else text[:200], self.outbox.pending_count(), delay,
         )
         return delay
+
+    def _handle_rejected(
+        self, batch: list[OutboxRow], status: int, text: str, error_body: dict[str, Any]
+    ) -> float:
+        """
+        The Worker validates a request atomically, so one malformed event fails the
+        whole batch. Dead-letter only the offending event and let the others retry.
+
+        - The Worker's 400 body carries the failing event's `index`: dead-letter that row.
+        - No index and more than one event: shrink the batch so the culprit is isolated
+          on the next pass (batch size grows back after the next success).
+        - A single rejected event is dead-lettered.
+        """
+        index = error_body.get("index")
+        if isinstance(index, bool) or not isinstance(index, int):
+            index = None
+        if index is not None and 0 <= index < len(batch):
+            bad = batch[index]
+            self.outbox.mark_dead([bad.seq], text)
+            logger.error(
+                "Worker rejected event %s as invalid (HTTP %d): %s. Dead-lettered it; "
+                "%d other event(s) in the batch will be retried.",
+                bad.event_id, status, text[:300], len(batch) - 1,
+            )
+            return 0.0
+
+        if len(batch) > 1:
+            self._batch_size = max(1, len(batch) // 2)
+            self.outbox.fail([row.seq for row in batch], text)
+            logger.warning(
+                "Worker rejected a %d-event batch (HTTP %d) without naming the event: %s. "
+                "Retrying in batches of %d to isolate it.",
+                len(batch), status, text[:200], self._batch_size,
+            )
+            return 0.0
+
+        self.outbox.mark_dead([batch[0].seq], text)
+        logger.error(
+            "Worker rejected event %s as invalid (HTTP %d): %s. Dead-lettered.",
+            batch[0].event_id, status, text[:300],
+        )
+        return 0.0
+
+
+def _worker_error_body(text: str) -> dict[str, Any] | None:
+    """
+    Return the parsed body when it is the Worker's own validation error
+    (`{"error": "...", "index"?: n}`), else None for any other 400-ish response.
+    """
+    try:
+        body = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(body, dict) or not isinstance(body.get("error"), str):
+        return None
+    return body
 
 
 def _summarise(events: list[dict[str, Any]]) -> str:
