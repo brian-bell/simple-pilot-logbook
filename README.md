@@ -2,7 +2,7 @@
 
 Automatically records your Microsoft Flight Simulator flights and shows them in a web logbook you can open from anywhere.
 
-A small Python **agent** on the sim PC watches MSFS through SimConnect, detects takeoffs and landings, and sends events to a **Cloudflare Worker**. The Worker stores them in **Cloudflare D1** and serves the logbook web app.
+A small Node.js **agent** on the sim PC watches MSFS through SimConnect, detects takeoffs and landings, and sends events to a **Cloudflare Worker**. The Worker stores them in **Cloudflare D1** and serves the logbook web app.
 
 ```
  sim PC                                   Cloudflare
@@ -30,8 +30,8 @@ A small Python **agent** on the sim PC watches MSFS through SimConnect, detects 
 | Component | Requirement | Notes |
 |---|---|---|
 | Agent (sim PC) | Windows 10/11 | SimConnect only runs on Windows |
-| Agent (sim PC) | Python 3.11+ **64-bit** | 32-bit Python will fail to load SimConnect.dll |
-| Agent (sim PC) | Microsoft Flight Simulator 2020 or 2024 | Must be running for live data collection |
+| Agent (sim PC) | Node.js 22.13+ and npm | Talks SimConnect directly through [node-simconnect](https://github.com/EvenAR/node-simconnect); no SimConnect SDK or DLL needed |
+| Agent (sim PC) | Microsoft Flight Simulator 2024 | Built for SU6 (1.8.x) and later. MSFS 2020 is supported best-effort through the older SimConnect protocol |
 | Worker | Cloudflare account (free plan is enough) | D1 + Workers Static Assets |
 | Deploying | Node.js 22+ and npm | Only on the machine you deploy from; wrangler 4.141 requires Node 22 |
 
@@ -39,26 +39,28 @@ A small Python **agent** on the sim PC watches MSFS through SimConnect, detects 
 
 1. **Deploy the Worker** once — follow [docs/cloud-deploy.md](docs/cloud-deploy.md) (`wrangler login`, create the D1 database, set the two token secrets, `wrangler deploy`). You end up with a URL like `https://simple-pilot-logbook.<account>.workers.dev`.
 2. **Configure the agent**: copy `agent\.env.example` to `agent\.env`, set `WORKER_URL` and `AGENT_TOKEN`.
-3. **Start the agent**: double-click **`start.bat`** (installs dependencies, opens the logbook, runs the agent), or install it as a Windows service per [docs/service-install.md](docs/service-install.md).
+3. **Start the agent**: double-click **`start.bat`** (installs dependencies, builds, opens the logbook, runs the agent), or install it as a Windows service per [docs/service-install.md](docs/service-install.md).
 4. **Open the logbook URL**, enter the viewer token, then fly. Flights appear after touchdown.
 
-Migrating from the old local-only version? `agent\import_legacy.py` copies `backend\logbook.db` into D1 — see the cloud deploy doc.
+Migrating from the old local-only version? The one-off `import_legacy.py` importer was retired with the Python agent; it is in git history at commit `84af342` if you still need it.
 
 ## Project Structure
 
 ```
 simple-pilot-logbook/
-├── agent/                       # Python service on the sim PC
-│   ├── main.py                  # entry point: SimConnect worker + sender + heartbeat loop
-│   ├── simconnect_worker.py     # 2 s SimConnect poll, takeoff/landing state machine, emits events
-│   ├── events.py                # event envelopes, SimVar string decoding, legacy cleanup
-│   ├── outbox.py                # SQLite outbox (agent/outbox.db) so nothing is lost offline
-│   ├── sender.py                # batches outbox → POST /api/events with retry/backoff
-│   ├── config.py                # reads agent/.env (WORKER_URL, AGENT_TOKEN, ...)
-│   ├── airports.py              # haversine distance + nearest-airport lookup
-│   ├── import_legacy.py         # one-off migration of the old logbook.db
-│   ├── windows_service.py       # Windows service host
-│   ├── requirements.txt
+├── agent/                       # Node.js (TypeScript) agent on the sim PC
+│   ├── src/main.ts              # entry point: SimConnect worker + sender + heartbeat loop
+│   ├── src/simconnect_client.ts # node-simconnect connection, data definitions, system events
+│   ├── src/flight_detector.ts   # takeoff/landing state machine (pure logic, no I/O)
+│   ├── src/simconnect_worker.ts # wires the client to the detector and the outbox
+│   ├── src/events.ts            # event envelopes shared with the Worker contract
+│   ├── src/outbox.ts            # SQLite outbox (agent/outbox.db, node:sqlite) so nothing is lost offline
+│   ├── src/sender.ts            # batches outbox → POST /api/events with retry/backoff
+│   ├── src/config.ts            # reads agent/.env (WORKER_URL, AGENT_TOKEN, ...)
+│   ├── src/airports.ts          # haversine distance + nearest-airport lookup
+│   ├── src/log.ts               # rotating agent.log
+│   ├── service/                 # WinSW service template (install_service.ps1 fills it in)
+│   ├── package.json, tsconfig.json
 │   ├── .env.example
 │   └── data/airports.json       # ~29 k airports (mwgg/Airports, open data)
 ├── worker/                      # Cloudflare Worker (TypeScript) + D1
@@ -70,7 +72,7 @@ simple-pilot-logbook/
 │   ├── style.css
 │   └── app.js
 ├── docs/
-│   ├── cloud-deploy.md          # Worker + D1 setup, local dev, legacy import
+│   ├── cloud-deploy.md          # Worker + D1 setup, local dev
 │   └── service-install.md       # Windows service install/uninstall
 ├── start.bat                    # Windows one-click agent launcher
 ├── install_service.ps1          # Windows service installer
@@ -121,18 +123,22 @@ Event types: `agent.heartbeat` (updates live status, not stored), `flight.takeof
 
 ## How Flight Detection Works
 
-The agent polls MSFS every 2 seconds and implements a simple state machine:
+The agent subscribes to the user aircraft once per second (position, altitude, on-ground flag, vertical speed, ground speed, G, camera state, slew, touchdown velocity), to a per-frame stream that only reports changes in G force and touchdown values, and to the sim's `Sim`, `Pause_EX1`, `Crashed`, `FlightLoaded` and `AircraftLoaded` events. Nothing is polled.
 
 ```
 DISCONNECTED ──connect──▶ ON_GROUND
-ON_GROUND    ──takeoff──▶ AIRBORNE   (emits flight.takeoff: departure coords, timestamp, aircraft)
-AIRBORNE     ──10 s────▶ AIRBORNE   (emits flight.position: lat/lon/alt/vs/gs)
-AIRBORNE     ──landing──▶ ON_GROUND  (emits flight.landing: arrival coords, peak descent VS, G-force)
+ON_GROUND    ──takeoff──▶ AIRBORNE   (emits flight.takeoff: departure airport, timestamp, aircraft)
+AIRBORNE     ──10 s────▶ AIRBORNE   (emits flight.position: lat/lon/alt/vs/ground speed in knots)
+AIRBORNE     ──landing──▶ ON_GROUND  (emits flight.landing 3 s after touchdown)
 ```
 
-- Flights shorter than 30 seconds are discarded (prevents false records from runway bumps).
-- Landing vertical speed is the most negative reading in the 6-second window before touchdown.
-- Departure and arrival airports are identified by finding the nearest airport in the bundled dataset within 10 nm.
+- **Only real flying counts.** MSFS 2024 parks the aircraft at a placeholder position (lat 0 / lon 0 or lat 0 / lon 90E, sometimes above 50,000 ft) in the main menu and on loading screens. Those samples, menu/world-map/loading camera states, replays and slew mode never start or end a flight. This is what used to create "flights" departing from nowhere and landing 7,000+ nm away.
+- **Landing vertical speed** comes from the sim's `PLANE TOUCHDOWN NORMAL VELOCITY` at the first contact. If the sim does not update it, the most negative vertical speed in the 6 seconds before touchdown is used. A bounce within 15 s counts as the same landing.
+- **Landing G-force** is the peak G from the per-frame stream between just before touchdown and 3 seconds after it.
+- **Flights that do not end with a landing** are still recorded. A crash reported by the sim gets `notes = "Crashed"` and the crash site as arrival. Quitting to the main menu (90 s at the placeholder position), teleporting (Travel To, restart), MSFS closing or the agent stopping mid-flight give `notes = "Ended without landing"` with no arrival. If the agent starts while you are already airborne, the flight has no departure airport and `notes = "Started in the air"`.
+- Flights shorter than 30 seconds are discarded whatever the ending.
+- Departure and arrival airports are the nearest airport in the bundled dataset within 10 nm.
+- Duration is wall-clock time from takeoff to touchdown; pauses are logged (`Pause_EX1`) but not subtracted yet.
 - Events are written to `agent/outbox.db` first and deleted only after the Worker acknowledges them. A heartbeat with the live status goes out every 10 seconds and is never queued.
 
 ## Landing Quality
@@ -150,7 +156,10 @@ AIRBORNE     ──landing──▶ ON_GROUND  (emits flight.landing: arrival co
 
 **Status shows "Disconnected"**
 - The agent is running but MSFS is not, or SimConnect could not attach. Start MSFS; the agent reconnects every 5 seconds.
-- Use 64-bit Python — run `python -c "import struct; print(struct.calcsize('P')*8)"` and verify it prints `64`.
+- `agent\agent.log` shows `Connected to MSFS 2024 via ...` once attached. The agent tries node-simconnect's auto-detection first (`SimConnect.cfg`, the named pipe, the registry port), then any static IPv4 port declared in `SimConnect.xml` (`%APPDATA%\Microsoft Flight Simulator 2024\` or the Store package's `LocalCache`, checked for every user profile). To force an endpoint, set `SIMCONNECT_HOST` and `SIMCONNECT_PORT` in `agent\.env`.
+
+**A flight was not recorded, or recorded oddly**
+- `agent\agent.log` has a `Sample live/hold/out: ...` line each time the classification changes, with the camera state and position. They show why a sample was ignored (placeholder position, menu camera, slew, replay).
 
 **Web UI keeps asking for a token**
 - The viewer token does not match the Worker's `VIEWER_TOKEN` secret. See [docs/cloud-deploy.md](docs/cloud-deploy.md).

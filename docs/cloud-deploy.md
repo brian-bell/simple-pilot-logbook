@@ -41,7 +41,7 @@ All commands below run from the `worker/` directory.
 5. Generate two random tokens (run twice):
 
    ```powershell
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
    ```
 
 6. Store them as Worker secrets (paste when prompted; they are never committed):
@@ -67,20 +67,13 @@ All commands below run from the `worker/` directory.
 
 ## Importing the old local logbook
 
-The pre-Cloudflare version stored flights in `backend\logbook.db`. Copy that file somewhere outside the repository first, then from the `agent\` directory:
-
-```powershell
-python import_legacy.py --db "C:\path\to\logbook.db" --dry-run
-python import_legacy.py --db "C:\path\to\logbook.db" --direct
-```
-
-The dry run prints the cleaned rows (aircraft names lose their old `b'...'` wrapper, date-only rows get a full timestamp). `--direct` posts them straight to the Worker using `agent\.env`. Re-running is harmless: every legacy row maps to the same event id, so the Worker reports `inserted_flights: 0` the second time. Use `--skip-ids 1,2` to leave out the seed "Test flight" rows.
+The one-off importer for the pre-Cloudflare `backend\logbook.db` (`agent\import_legacy.py`) was retired together with the Python agent after the migration was completed. It is still in git history at commit `84af342`; check out that commit and follow this document's version there if you need to import another old database.
 
 ## Updating after code changes
 
 - Worker or frontend changed: `cd worker && npx wrangler deploy` (the frontend is uploaded as static assets with the Worker).
 - Schema changed: add a file under `worker/migrations/` (`npx wrangler d1 migrations create simple-pilot-logbook <name>`), then `npm run migrate:remote` before deploying.
-- Agent changed: pull on the sim PC and restart the service (`python agent\windows_service.py restart` as Administrator) or `start.bat`.
+- Agent changed: pull on the sim PC and rerun `.\install_service.ps1` as Administrator (rebuilds and restarts the service), or run `start.bat`.
 
 ## Local development
 
@@ -91,7 +84,7 @@ npm run migrate:local                    # local D1 in worker/.wrangler/state
 npm run dev                              # http://localhost:8787
 ```
 
-Point the agent at it with `WORKER_URL=http://localhost:8787` and `AGENT_TOKEN=dev-agent` in `agent\.env`, then `python agent\main.py`. Without MSFS the status shows "Disconnected" while heartbeats flow.
+Point the agent at it with `WORKER_URL=http://localhost:8787` and `AGENT_TOKEN=dev-agent` in `agent\.env` (or as environment variables, which override the file), then from `agent\` run `npm run build` and `npm start`. Without MSFS the status shows "Disconnected" while heartbeats flow.
 
 Handy checks:
 
