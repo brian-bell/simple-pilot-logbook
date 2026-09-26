@@ -53,7 +53,7 @@ const ABANDON_AFTER_MS = 90_000;
 const RESYNC_GAP_MS = 10_000;
 const FRAME_BUFFER_MS = 10_000;
 const MAX_PLAUSIBLE_ALT_FT = 100_000;
-/** Faster than any aircraft (even at 16x sim rate): 0.25 nm/s is 900 kt, plus a margin. */
+/** Faster than any aircraft: 0.25 nm/s is 900 kt, scaled by the simulation rate, plus a margin. */
 const TELEPORT_NM_PER_S = 0.25;
 const TELEPORT_MARGIN_NM = 5;
 const MAX_PLAUSIBLE_TOUCHDOWN_FPS = 100; // 6,000 fpm
@@ -386,8 +386,9 @@ export class FlightDetector {
     const prev = this.lastLive;
     const gapMs = this.lastLiveMono === null ? Infinity : s.mono - this.lastLiveMono;
     const jumpNm = prev ? haversineNm(prev.lat, prev.lon, s.lat, s.lon) : 0;
+    const rate = Math.max(1, this.lastSimRate ?? 1);
     const teleported =
-      prev !== null && jumpNm > TELEPORT_MARGIN_NM + (TELEPORT_NM_PER_S * Math.max(gapMs, 1000)) / 1000;
+      prev !== null && jumpNm > TELEPORT_MARGIN_NM + (TELEPORT_NM_PER_S * rate * Math.max(gapMs, 1000)) / 1000;
 
     this.lastLiveMono = s.mono;
     this.lastLive = s;
@@ -492,10 +493,11 @@ export class FlightDetector {
     f.aircraftRegistration ??= this.aircraft.atcId;
     f.livery ??= this.aircraft.livery;
 
-    // A touch-and-go long after the previous contact starts a fresh landing record.
-    if (f.touchdown && s.mono - f.touchdown.lastContactMono > BOUNCE_MERGE_MS) {
-      f.touchdown = null;
+    if (f.touchdown && s.mono - f.touchdown.lastContactMono > TOUCHDOWN_SETTLE_MS) {
+      // The last contact's value has settled: a later contact must differ from it to count as fresh.
       f.touchdownBaselineFps = s.touchdownNormalFps;
+      // A touch-and-go long after the previous contact starts a fresh landing record.
+      if (s.mono - f.touchdown.lastContactMono > BOUNCE_MERGE_MS) f.touchdown = null;
     }
 
     if (s.mono - f.lastPositionMono >= this.positionMs) {
@@ -515,7 +517,7 @@ export class FlightDetector {
     const contactFrame = this.frames.find((fr) => fr.mono >= since && fr.onGround === true);
     const contactMono = Math.min(contactFrame?.mono ?? s.mono, s.mono);
 
-    if (f.touchdown && contactMono - f.touchdown.firstContactMono <= BOUNCE_MERGE_MS) {
+    if (f.touchdown && contactMono - f.touchdown.lastContactMono <= BOUNCE_MERGE_MS) {
       f.touchdown.lastContactMono = contactMono; // bounce: same landing, keep the first contact's values
     } else {
       const window = this.vsWindow.filter((v) => v.mono <= contactMono + 250).map((v) => v.vs);

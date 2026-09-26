@@ -156,7 +156,7 @@ AIRBORNE     ──landing──▶ ON_GROUND  (emits flight.landing 3 s after t
 
 **Status shows "Disconnected"**
 - The agent is running but MSFS is not, or SimConnect could not attach. Start MSFS; the agent reconnects every 5 seconds.
-- `agent\agent.log` shows `Connected to MSFS 2024 via ...` once attached. The agent tries the SimConnect named pipe first, then the static IPv4 port declared in `%APPDATA%\Microsoft Flight Simulator 2024\SimConnect.xml`. To force an endpoint, set `SIMCONNECT_HOST` and `SIMCONNECT_PORT` in `agent\.env`.
+- `agent\agent.log` shows `Connected to MSFS 2024 via ...` once attached. The agent tries node-simconnect's auto-detection first (`SimConnect.cfg`, the named pipe, the registry port), then any static IPv4 port declared in `SimConnect.xml` (`%APPDATA%\Microsoft Flight Simulator 2024\` or the Store package's `LocalCache`, checked for every user profile). To force an endpoint, set `SIMCONNECT_HOST` and `SIMCONNECT_PORT` in `agent\.env`.
 
 **A flight was not recorded, or recorded oddly**
 - `agent\agent.log` has a `Sample live/hold/out: ...` line each time the classification changes, with the camera state and position. They show why a sample was ignored (placeholder position, menu camera, slew, replay).

@@ -32,7 +32,6 @@ import { getLogger } from "./log.js";
 const log = getLogger("simconnect");
 
 const APP_NAME = "Simple Pilot Logbook";
-const PIPE_NAME = "\\\\.\\pipe\\Microsoft Flight Simulator\\SimConnect";
 const OPEN_TIMEOUT_MS = 10_000;
 const RETRY_MS = 5_000;
 /** Reconnect when the sim says it is running and unpaused but no 1 Hz sample arrived for this long. */
@@ -260,36 +259,28 @@ const str = (v: number | string | null | undefined): string | null => (typeof v 
 
 interface Endpoint {
   label: string;
-  /** undefined = node-simconnect auto-detection (SimConnect.cfg, then the named pipe). */
+  /** undefined = node-simconnect auto-detection (SimConnect.cfg, the named pipe, then the registry port). */
   options?: ConnectionOptions;
-}
-
-async function pipeExists(name: string): Promise<boolean> {
-  try {
-    await fs.promises.access(name, fs.constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
  * SimConnect.xml files MSFS 2024 writes. Under the Windows service (LocalSystem)
- * %APPDATA% is the system profile, so every user profile is checked too.
+ * %APPDATA% and %LOCALAPPDATA% are the system profile, so every user profile is checked too.
  */
 function simConnectXmlCandidates(): string[] {
   const rel = path.join("Microsoft Flight Simulator 2024", "SimConnect.xml");
+  const storeRel = path.join("Packages", "Microsoft.Limitless_8wekyb3d8bbwe", "LocalCache", "SimConnect.xml");
   const candidates = new Set<string>();
   if (process.env.APPDATA) candidates.add(path.join(process.env.APPDATA, rel));
   if (process.env.LOCALAPPDATA) {
-    candidates.add(
-      path.join(process.env.LOCALAPPDATA, "Packages", "Microsoft.Limitless_8wekyb3d8bbwe", "LocalCache", "SimConnect.xml"),
-    );
+    candidates.add(path.join(process.env.LOCALAPPDATA, storeRel));
   }
   const usersDir = path.join(process.env.SystemDrive ?? "C:", "\\", "Users");
   try {
     for (const entry of fs.readdirSync(usersDir, { withFileTypes: true })) {
-      if (entry.isDirectory()) candidates.add(path.join(usersDir, entry.name, "AppData", "Roaming", rel));
+      if (!entry.isDirectory()) continue;
+      candidates.add(path.join(usersDir, entry.name, "AppData", "Roaming", rel));
+      candidates.add(path.join(usersDir, entry.name, "AppData", "Local", storeRel));
     }
   } catch {
     // no access to C:\Users; the env-based candidates remain
@@ -325,8 +316,8 @@ async function resolveEndpoints(cfg: Config): Promise<Endpoint[]> {
       },
     ];
   }
-  const endpoints: Endpoint[] = [];
-  if (await pipeExists(PIPE_NAME)) endpoints.push({ label: "named pipe" });
+  // Auto-detection always goes first: it covers SimConnect.cfg and the registry port even when no pipe is visible.
+  const endpoints: Endpoint[] = [{ label: "auto-detect (SimConnect.cfg, named pipe, registry port)" }];
   for (const port of staticIpv4Ports()) {
     endpoints.push({ label: `TCP 127.0.0.1:${port} (SimConnect.xml)`, options: { host: "127.0.0.1", port } });
   }
@@ -434,7 +425,7 @@ export class SimConnectClient {
       }
     }
 
-    this.logWaiting(endpoints.length ? failures.join("; ") : "no SimConnect pipe or port found");
+    this.logWaiting(failures.join("; "));
     this.scheduleConnect(RETRY_MS);
   }
 

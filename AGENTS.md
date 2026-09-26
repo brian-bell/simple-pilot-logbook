@@ -12,7 +12,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 
 ## Key Files
 - `agent/src/main.ts`: agent entry point; starts the SimConnect worker + `Sender`, sends a heartbeat every 10 s, graceful shutdown on SIGINT/SIGTERM/SIGBREAK
-- `agent/src/simconnect_client.ts`: node-simconnect connection (named pipe, then the static IPv4 port from `SimConnect.xml`; `SIMCONNECT_HOST/PORT` override), data definitions, system events, reconnect every 5 s
+- `agent/src/simconnect_client.ts`: node-simconnect connection (auto-detection: SimConnect.cfg, named pipe, registry port; then static IPv4 ports from `SimConnect.xml`; `SIMCONNECT_HOST/PORT` override), data definitions, system events, reconnect every 5 s
 - `agent/src/flight_detector.ts`: flight state machine (pure logic, injectable clock); sample classification live/hold/out, touchdown metrics, flight endings
 - `agent/src/simconnect_worker.ts`: wires client -> detector -> outbox callback; 1 s tick
 - `agent/src/events.ts`: event envelopes (`id`, `type`, `ts`, `payload`), `FLIGHT_FIELDS`, `finiteNum`

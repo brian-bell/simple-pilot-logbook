@@ -18,6 +18,7 @@ const log = getLogger("sender");
 const USER_AGENT = "simple-pilot-logbook-agent/3.0";
 const MAX_BACKOFF_SECONDS = 300;
 const TOKEN_RETRY_SECONDS = 60;
+const OUTBOX_ERROR_RETRY_SECONDS = 30;
 const PRUNE_EVERY_IDLE_WAITS = 720; // roughly hourly while idle (5 s waits)
 
 /**
@@ -127,13 +128,20 @@ export class Sender {
   private async run(): Promise<void> {
     this.prune();
     while (!this.stopped) {
-      const batch = this.outbox.nextBatch(this.batchSize);
-      if (!batch.length) {
-        await this.wakeSignal.wait(5000);
-        if (++this.pruneCountdown >= PRUNE_EVERY_IDLE_WAITS) this.prune();
-        continue;
+      let delaySeconds: number;
+      try {
+        const batch = this.outbox.nextBatch(this.batchSize);
+        if (!batch.length) {
+          await this.wakeSignal.wait(5000);
+          if (++this.pruneCountdown >= PRUNE_EVERY_IDLE_WAITS) this.prune();
+          continue;
+        }
+        delaySeconds = await this.deliver(batch);
+      } catch (err) {
+        // An outbox error (disk full, locked file) must not stop delivery for good.
+        log.error(`Outbox error; retrying in ${OUTBOX_ERROR_RETRY_SECONDS} s:`, err);
+        delaySeconds = OUTBOX_ERROR_RETRY_SECONDS;
       }
-      const delaySeconds = await this.deliver(batch);
       if (delaySeconds > 0 && !this.stopped) await this.stopSignal.wait(delaySeconds * 1000);
     }
   }
