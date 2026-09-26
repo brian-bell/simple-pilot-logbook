@@ -2,6 +2,9 @@
   "name": "simple-pilot-logbook-worker",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

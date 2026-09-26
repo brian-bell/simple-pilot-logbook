@@ -4,7 +4,7 @@ The logbook web app and its API run as a Cloudflare Worker backed by a D1 databa
 
 ## Prerequisites
 - A Cloudflare account (free)
-- Node.js 18+ and npm on the machine you deploy from
+- Node.js 22+ and npm on the machine you deploy from (the pinned wrangler 4.141 requires Node 22)
 - This repository checked out
 
 All commands below run from the `worker/` directory.

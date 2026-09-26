@@ -33,7 +33,7 @@ A small Python **agent** on the sim PC watches MSFS through SimConnect, detects 
 | Agent (sim PC) | Python 3.11+ **64-bit** | 32-bit Python will fail to load SimConnect.dll |
 | Agent (sim PC) | Microsoft Flight Simulator 2020 or 2024 | Must be running for live data collection |
 | Worker | Cloudflare account (free plan is enough) | D1 + Workers Static Assets |
-| Deploying | Node.js 18+ and npm | Only on the machine you deploy from |
+| Deploying | Node.js 22+ and npm | Only on the machine you deploy from; wrangler 4.141 requires Node 22 |
 
 ## Quick Start
 
