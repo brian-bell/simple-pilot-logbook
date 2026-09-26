@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "worker-dev",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d worker && node_modules\\.bin\\wrangler.cmd dev --port 8787"],
+      "port": 8787
+    }
+  ]
+}
