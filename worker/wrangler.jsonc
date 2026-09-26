@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "simple-pilot-logbook",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+
+  // Static frontend (../frontend) is served directly by Cloudflare's asset
+  // layer. Only /api/* requests invoke the Worker.
+  "assets": {
+    "directory": "../frontend",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Create with:  npx wrangler d1 create simple-pilot-logbook
+  // then paste the printed database_id below.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "simple-pilot-logbook",
+      "database_id": "REPLACE_WITH_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Secrets (never in this file):
+  //   npx wrangler secret put AGENT_TOKEN    - used by the local agent to POST /api/events
+  //   npx wrangler secret put VIEWER_TOKEN   - used by the browser UI for every other /api route
+  // For local dev put both in worker/.dev.vars (see .dev.vars.example).
+
+  "observability": {
+    "enabled": true
+  }
+}

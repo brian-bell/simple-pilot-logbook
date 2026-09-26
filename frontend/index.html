@@ -17,6 +17,7 @@
       <h1>Pilot Logbook</h1>
     </div>
     <div class="header-right">
+      <button class="btn-signout hidden" id="btn-signout" type="button" title="Forget the saved viewer token">Sign out</button>
       <span class="status-label" id="status-label">Connecting…</span>
       <span class="status-dot" id="status-dot"></span>
     </div>
@@ -103,6 +104,26 @@
       <div class="modal-body" id="modal-body">
         <!-- populated dynamically -->
       </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       SIGN-IN OVERLAY  (shown until a viewer token is saved)
+  ================================================================ -->
+  <div class="modal-overlay hidden" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="modal auth-modal">
+      <div class="modal-header">
+        <span class="modal-title" id="auth-title">Sign in</span>
+      </div>
+      <form class="modal-body auth-form" id="auth-form" autocomplete="off">
+        <p class="auth-hint">Enter the viewer token for this logbook. It is kept only in this browser.</p>
+        <input type="password" id="auth-token" class="auth-input" placeholder="Viewer token"
+               autocomplete="off" spellcheck="false" required>
+        <div class="auth-actions">
+          <span class="auth-error" id="auth-error" role="alert"></span>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
     </div>
   </div>
 

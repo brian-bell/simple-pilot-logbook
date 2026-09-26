@@ -79,8 +79,8 @@ function Invoke-PythonCommand {
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backendDir = Join-Path $repoRoot "backend"
-$serviceScript = Join-Path $backendDir "windows_service.py"
+$agentDir = Join-Path $repoRoot "agent"
+$serviceScript = Join-Path $agentDir "windows_service.py"
 $pythonCmd = Get-PythonCommand -Preferred $PythonCommand
 $pythonCmdDisplay = $pythonCmd -join " "
 $serviceExists = $null -ne (Get-Service -Name "SimplePilotLogbook" -ErrorAction SilentlyContinue)

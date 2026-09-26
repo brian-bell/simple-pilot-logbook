@@ -51,3 +51,14 @@ backend/*.db-shm
 # OS files
 .DS_Store
 Thumbs.db
+
+# Cloudflare worker
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
+
+# Local agent runtime data
+agent/*.db
+agent/*.db-*
+agent/.env
+agent/*.log
