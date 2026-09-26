@@ -62,3 +62,16 @@ agent/*.db
 agent/*.db-*
 agent/.env
 agent/*.log
+agent/*.log.*
+
+# Node agent build output and dependencies
+agent/node_modules/
+agent/dist/
+
+# Generated Windows service files (the .xml.template is committed)
+agent/service/*.exe
+agent/service/*.log
+agent/service/SimplePilotLogbook.xml
+agent/service/*.out.log
+agent/service/*.err.log
+agent/service/*.wrapper.log

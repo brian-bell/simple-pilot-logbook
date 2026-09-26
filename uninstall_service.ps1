@@ -1,8 +1,9 @@
-param(
-    [string]$PythonCommand = ""
-)
+# Stops and removes the SimplePilotLogbook Windows service (WinSW or the older
+# pywin32 registration). Leaves agent\.env, agent\outbox.db and the logs alone.
 
 $ErrorActionPreference = "Stop"
+
+$ServiceName = "SimplePilotLogbook"
 
 function Write-Step {
     param([string]$Message)
@@ -10,106 +11,35 @@ function Write-Step {
     Write-Host "==> $Message"
 }
 
-function Get-CommandTail {
-    param([string[]]$Command)
-
-    if ($Command.Length -gt 1) {
-        return $Command[1..($Command.Length - 1)]
-    }
-
-    return @()
-}
-
-function Test-PythonCommand {
-    param([string[]]$Command)
-
-    try {
-        $tail = Get-CommandTail -Command $Command
-        $null = & $Command[0] @tail --version 2>$null
-        return $LASTEXITCODE -eq 0
-    }
-    catch {
-        return $false
-    }
-}
-
-function Get-PythonCommand {
-    param([string]$Preferred)
-
-    if ($Preferred) {
-        $candidate = @($Preferred)
-        if (Test-PythonCommand -Command $candidate) {
-            return $candidate
-        }
-        throw "The requested Python command '$Preferred' did not run successfully."
-    }
-
-    $candidates = @(
-        @("python"),
-        @("py", "-3")
-    )
-
-    foreach ($candidate in $candidates) {
-        if (Test-PythonCommand -Command $candidate) {
-            return $candidate
-        }
-    }
-
-    throw "Python 3.11+ was not found. Install Python and rerun this script."
-}
-
-function Invoke-PythonCommand {
-    param(
-        [string[]]$Command,
-        [string[]]$Arguments,
-        [switch]$AllowFailure
-    )
-
-    $fullArgs = @(Get-CommandTail -Command $Command)
-    $fullArgs += $Arguments
-
-    & $Command[0] @fullArgs
-    $exitCode = $LASTEXITCODE
-
-    if (-not $AllowFailure -and $exitCode -ne 0) {
-        throw "Python command failed with exit code ${exitCode}: $($Command -join ' ') $($Arguments -join ' ')"
-    }
-
-    return $exitCode
-}
-
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$agentDir = Join-Path $repoRoot "agent"
-$serviceScript = Join-Path $agentDir "windows_service.py"
-$pythonCmd = Get-PythonCommand -Preferred $PythonCommand
-$pythonCmdDisplay = $pythonCmd -join " "
-$serviceExists = $null -ne (Get-Service -Name "SimplePilotLogbook" -ErrorAction SilentlyContinue)
-
-if (-not (Test-Path $serviceScript)) {
-    throw "Service script not found: $serviceScript"
-}
+$wrapperExe = Join-Path $repoRoot "agent\service\$ServiceName.exe"
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Run this script from an elevated PowerShell session (Run as Administrator)."
 }
 
-Write-Step "Checking Python"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @("--version")
-
-if (-not $serviceExists) {
+$service = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
+if (-not $service) {
     Write-Step "Service not installed"
-    Write-Host "SimplePilotLogbook is not currently installed."
+    Write-Host "$ServiceName is not currently installed."
     exit 0
 }
 
-Write-Step "Stopping service"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "stop") -AllowFailure | Out-Null
-
-Write-Step "Removing service"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "remove")
+if ((Test-Path $wrapperExe) -and ($service.PathName -like "*$wrapperExe*")) {
+    Write-Step "Stopping service"
+    & $wrapperExe stop | Out-Null
+    Write-Step "Removing service"
+    & $wrapperExe uninstall
+    if ($LASTEXITCODE -ne 0) { throw "WinSW uninstall failed with exit code $LASTEXITCODE." }
+}
+else {
+    Write-Step "Stopping service ($($service.PathName))"
+    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    Write-Step "Removing service"
+    & sc.exe delete $ServiceName
+    if ($LASTEXITCODE -ne 0) { throw "sc.exe delete failed with exit code $LASTEXITCODE." }
+}
 
 Write-Step "Done"
-Write-Host "Removed service : SimplePilotLogbook"
-Write-Host "Command used    : $pythonCmdDisplay"
-
+Write-Host "Removed service : $ServiceName"

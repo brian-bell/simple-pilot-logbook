@@ -9,11 +9,17 @@ echo.
 
 cd /d "%~dp0agent"
 
-echo  Checking Python...
-python --version 2>NUL
+echo  Checking Node.js...
+node --version 2>NUL
 if errorlevel 1 (
-    echo  [ERROR] Python not found. Please install Python 3.11+ ^(64-bit^).
-    echo          https://www.python.org/downloads/
+    echo  [ERROR] Node.js not found. Please install Node.js 22.13 or newer ^(LTS^).
+    echo          https://nodejs.org/
+    pause
+    exit /b 1
+)
+node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)"
+if errorlevel 1 (
+    echo  [ERROR] Node.js 22.13 or newer is required.
     pause
     exit /b 1
 )
@@ -27,8 +33,23 @@ if not exist ".env" (
     exit /b 1
 )
 
-echo  Installing dependencies...
-python -m pip install -r requirements.txt --quiet
+if not exist "node_modules\node-simconnect" (
+    echo  Installing dependencies...
+    call npm ci --no-audit --no-fund
+    if errorlevel 1 (
+        echo  [ERROR] npm ci failed.
+        pause
+        exit /b 1
+    )
+)
+
+echo  Building...
+call npm run build --silent
+if errorlevel 1 (
+    echo  [ERROR] Build failed.
+    pause
+    exit /b 1
+)
 
 set "WORKER_URL="
 for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
@@ -44,6 +65,6 @@ if defined WORKER_URL (
 echo  Starting agent ^(Ctrl+C or close this window to stop^)
 echo.
 
-python main.py
+node --disable-warning=ExperimentalWarning dist\main.js
 
 pause

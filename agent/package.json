@@ -1,0 +1,21 @@
+{
+  "name": "simple-pilot-logbook-agent",
+  "private": true,
+  "type": "module",
+  "description": "Sim-PC agent: watches MSFS through SimConnect and ships flight events to the Cloudflare Worker.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "start": "node --disable-warning=ExperimentalWarning dist/main.js"
+  },
+  "dependencies": {
+    "node-simconnect": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,8 +1,18 @@
 param(
-    [string]$PythonCommand = ""
+    [string]$NodeCommand = ""
 )
 
+# Installs or updates the SimplePilotLogbook Windows service.
+# The agent is a Node.js app (agent/dist/main.js) hosted by WinSW, a small
+# service wrapper downloaded on first install and verified by SHA-256.
+# Replaces the older pywin32 (Python) service registration if one exists.
+
 $ErrorActionPreference = "Stop"
+
+$ServiceName = "SimplePilotLogbook"
+$MinNodeVersion = [version]"22.13.0"
+$WinSWUrl = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
+$WinSWSha256 = "05B82D46AD331CC16BDC00DE5C6332C1EF818DF8CEEFCD49C726553209B3A0DA"
 
 function Write-Step {
     param([string]$Message)
@@ -10,147 +20,44 @@ function Write-Step {
     Write-Host "==> $Message"
 }
 
-function Write-WarningLine {
-    param([string]$Message)
-    Write-Host "WARNING: $Message" -ForegroundColor Yellow
-}
-
-function Get-CommandTail {
-    param([string[]]$Command)
-
-    if ($Command.Length -gt 1) {
-        return $Command[1..($Command.Length - 1)]
-    }
-
-    return @()
-}
-
-function Test-PythonCommand {
-    param([string[]]$Command)
-
-    try {
-        $tail = Get-CommandTail -Command $Command
-        $null = & $Command[0] @tail --version 2>$null
-        return $LASTEXITCODE -eq 0
-    }
-    catch {
-        return $false
+function Invoke-Checked {
+    param([string]$Exe, [string[]]$Arguments)
+    & $Exe @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $Exe $($Arguments -join ' ')"
     }
 }
 
-function Get-PythonCommand {
+function Get-NodeExe {
     param([string]$Preferred)
-
     if ($Preferred) {
-        $candidate = @($Preferred)
-        if (Test-PythonCommand -Command $candidate) {
-            return $candidate
-        }
-        throw "The requested Python command '$Preferred' did not run successfully."
+        $cmd = Get-Command $Preferred -ErrorAction SilentlyContinue
+        if (-not $cmd) { throw "The requested Node command '$Preferred' was not found." }
+        return $cmd.Source
     }
-
-    $candidates = @(
-        @("python"),
-        @("py", "-3")
-    )
-
-    foreach ($candidate in $candidates) {
-        if (Test-PythonCommand -Command $candidate) {
-            return $candidate
-        }
-    }
-
-    throw "Python 3.11+ was not found. Install Python and rerun this script."
-}
-
-function Invoke-PythonCommand {
-    param(
-        [string[]]$Command,
-        [string[]]$Arguments,
-        [switch]$AllowFailure
-    )
-
-    $fullArgs = @(Get-CommandTail -Command $Command)
-    $fullArgs += $Arguments
-
-    & $Command[0] @fullArgs
-    $exitCode = $LASTEXITCODE
-
-    if (-not $AllowFailure -and $exitCode -ne 0) {
-        throw "Python command failed with exit code ${exitCode}: $($Command -join ' ') $($Arguments -join ' ')"
-    }
-
-    return $exitCode
-}
-
-function Get-PythonStringResult {
-    param(
-        [string[]]$Command,
-        [string]$Code
-    )
-
-    $fullArgs = @(Get-CommandTail -Command $Command)
-    $fullArgs += @("-c", $Code)
-    return (& $Command[0] @fullArgs)
-}
-
-function Invoke-Pywin32PostInstall {
-    param([string[]]$Command)
-
-    $moduleExitCode = Invoke-PythonCommand -Command $Command -Arguments @("-m", "pywin32_postinstall", "-install") -AllowFailure
-    if ($moduleExitCode -eq 0) {
-        return $true
-    }
-
-    $pythonCode = @"
-import pathlib
-import sysconfig
-
-candidates = []
-for key in ("scripts", "purelib", "platlib"):
-    value = sysconfig.get_path(key)
-    if not value:
-        continue
-    root = pathlib.Path(value)
-    candidates.extend([
-        root / "pywin32_postinstall.py",
-        root / "pywin32_postinstall.pyw",
-    ])
-
-for candidate in candidates:
-    if candidate.exists():
-        print(candidate)
-        break
-else:
-    raise SystemExit(1)
-"@
-
-    $scriptPath = Get-PythonStringResult -Command $Command -Code $pythonCode
-    if (-not $scriptPath) {
-        Write-WarningLine "pywin32 post-install entrypoint was not found. Continuing because the service can still run without it on some systems."
-        return $false
-    }
-
-    $scriptPath = ($scriptPath | Select-Object -First 1).Trim()
-    Write-Host "Using pywin32 post-install script: $scriptPath"
-    Invoke-PythonCommand -Command $Command -Arguments @($scriptPath, "-install")
-    return $true
+    $cmd = Get-Command node.exe -ErrorAction SilentlyContinue
+    if (-not $cmd) { throw "Node.js was not found. Install Node.js $MinNodeVersion or newer (https://nodejs.org/) and rerun this script." }
+    return $cmd.Source
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $agentDir = Join-Path $repoRoot "agent"
-$serviceScript = Join-Path $agentDir "windows_service.py"
+$serviceDir = Join-Path $agentDir "service"
+$wrapperExe = Join-Path $serviceDir "$ServiceName.exe"
+$wrapperXml = Join-Path $serviceDir "$ServiceName.xml"
+$template = Join-Path $serviceDir "$ServiceName.xml.template"
 $envFile = Join-Path $agentDir ".env"
-$pythonCmd = Get-PythonCommand -Preferred $PythonCommand
-$pythonCmdDisplay = $pythonCmd -join " "
-$serviceExists = $null -ne (Get-Service -Name "SimplePilotLogbook" -ErrorAction SilentlyContinue)
 
-if (-not (Test-Path $serviceScript)) {
-    throw "Service script not found: $serviceScript"
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "Run this script from an elevated PowerShell session (Run as Administrator)."
 }
 
 if (-not (Test-Path $envFile)) {
     throw "agent\.env not found. Copy agent\.env.example to agent\.env and set WORKER_URL and AGENT_TOKEN first (see docs\cloud-deploy.md)."
+}
+if (-not (Test-Path $template)) {
+    throw "Service template not found: $template"
 }
 
 $workerUrl = Get-Content $envFile |
@@ -160,42 +67,94 @@ if ($workerUrl) {
     $workerUrl = ($workerUrl -replace '^\s*WORKER_URL\s*=\s*', '').Trim().Trim('"', "'")
 }
 
-$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw "Run this script from an elevated PowerShell session (Run as Administrator)."
+Write-Step "Checking Node.js"
+$nodeExe = Get-NodeExe -Preferred $NodeCommand
+$nodeVersion = [version](& $nodeExe -p "process.versions.node")
+Write-Host "Node $nodeVersion at $nodeExe"
+if ($nodeVersion -lt $MinNodeVersion) {
+    throw "Node.js $MinNodeVersion or newer is required (found $nodeVersion)."
+}
+$npmCmd = Join-Path (Split-Path -Parent $nodeExe) "npm.cmd"
+if (-not (Test-Path $npmCmd)) {
+    $npmCmd = (Get-Command npm.cmd -ErrorAction Stop).Source
 }
 
-Write-Step "Checking Python"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @("--version")
+Write-Step "Installing agent dependencies and building"
+Push-Location $agentDir
+try {
+    Invoke-Checked -Exe $npmCmd -Arguments @("ci", "--no-audit", "--no-fund")
+    Invoke-Checked -Exe $npmCmd -Arguments @("run", "build")
+}
+finally {
+    Pop-Location
+}
 
-Write-Step "Installing agent dependencies"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @("-m", "pip", "install", "-r", (Join-Path $agentDir "requirements.txt"))
+Write-Step "Checking for an older service registration"
+$existing = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
+if ($existing -and ($existing.PathName -notlike "*$wrapperExe*")) {
+    Write-Host "Removing the previous registration ($($existing.PathName))."
+    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    & sc.exe delete $ServiceName | Out-Null
+    for ($i = 0; $i -lt 20 -and (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue); $i++) {
+        Start-Sleep -Milliseconds 500
+    }
+    if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+        throw "The old $ServiceName service is still registered (it may be open in services.msc). Close it and rerun."
+    }
+    $existing = $null
+}
+elseif (-not $existing) {
+    Write-Host "No existing service."
+}
 
-Write-Step "Installing pywin32 for Windows service support"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @("-m", "pip", "install", "pywin32")
-
-Write-Step "Running pywin32 post-install registration"
-Invoke-Pywin32PostInstall -Command $pythonCmd | Out-Null
-
-if ($serviceExists) {
-    Write-Step "Updating existing Windows service"
-    Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "update")
+Write-Step "Preparing the service wrapper (WinSW)"
+if (-not (Test-Path $wrapperExe)) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $download = Join-Path $env:TEMP "WinSW-x64-$([guid]::NewGuid()).exe"
+    Write-Host "Downloading $WinSWUrl"
+    Invoke-WebRequest -Uri $WinSWUrl -OutFile $download -UseBasicParsing
+    $hash = (Get-FileHash -Path $download -Algorithm SHA256).Hash
+    if ($hash -ne $WinSWSha256) {
+        Remove-Item $download -Force
+        throw "WinSW download failed verification (SHA-256 $hash, expected $WinSWSha256)."
+    }
+    Move-Item -Path $download -Destination $wrapperExe -Force
 }
 else {
-    Write-Step "Registering Windows service"
-    Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "--startup", "auto", "install")
+    $hash = (Get-FileHash -Path $wrapperExe -Algorithm SHA256).Hash
+    if ($hash -ne $WinSWSha256) {
+        throw "$wrapperExe does not match the pinned WinSW 2.12.0 hash. Delete it and rerun this script."
+    }
+}
+Write-Host "WinSW 2.12.0 verified."
+
+Write-Step "Writing service configuration"
+$xml = Get-Content -Path $template -Raw
+$xml = $xml.Replace("__NODE_EXE__", [System.Security.SecurityElement]::Escape($nodeExe))
+$xml = $xml.Replace("__AGENT_DIR__", [System.Security.SecurityElement]::Escape($agentDir))
+Set-Content -Path $wrapperXml -Value $xml -Encoding UTF8
+Write-Host $wrapperXml
+
+if ($existing) {
+    Write-Step "Updating the existing service"
+    & $wrapperExe stop | Out-Null
+    Invoke-Checked -Exe $wrapperExe -Arguments @("refresh")
+}
+else {
+    Write-Step "Registering the service"
+    Invoke-Checked -Exe $wrapperExe -Arguments @("install")
 }
 
-Write-Step "Restarting service"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "restart")
+Write-Step "Starting the service"
+Invoke-Checked -Exe $wrapperExe -Arguments @("start")
+Start-Sleep -Seconds 2
+Get-Service -Name $ServiceName | Format-Table -AutoSize Name, Status, StartType
 
 Write-Step "Done"
-Write-Host "Service name : SimplePilotLogbook"
+Write-Host "Service name : $ServiceName"
 if ($workerUrl) {
     Write-Host "Logbook URL  : $workerUrl"
 }
-Write-Host "Service log  : $(Join-Path $agentDir 'service.log')"
 Write-Host "Agent log    : $(Join-Path $agentDir 'agent.log')"
-Write-Host "Remove later : $pythonCmdDisplay $serviceScript stop"
-Write-Host "               $pythonCmdDisplay $serviceScript remove"
-
+Write-Host "Service logs : $serviceDir (wrapper, stdout, stderr)"
+Write-Host "Remove later : .\uninstall_service.ps1"
