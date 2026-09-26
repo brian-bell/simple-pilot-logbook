@@ -20,7 +20,7 @@
     {
       "binding": "DB",
       "database_name": "simple-pilot-logbook",
-      "database_id": "REPLACE_WITH_DATABASE_ID",
+      "database_id": "66464551-13c4-41e2-89df-991da2223bef",
       "migrations_dir": "migrations"
     }
   ],
