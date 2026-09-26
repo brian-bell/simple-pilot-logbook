@@ -22,7 +22,13 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from airports import find_nearest_airport, haversine_nm
-from events import decode_simvar_str, landing_event, position_event, takeoff_event
+from events import (
+    decode_simvar_str,
+    finite_num,
+    landing_event,
+    position_event,
+    takeoff_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +157,11 @@ class SimConnectWorker(threading.Thread):
             except Exception as exc:
                 logger.warning("SimConnect read error: %s", exc)
                 raise  # bubble up to trigger reconnect
+
+            # NaN/inf readings become None so they never reach an event (JSON has no NaN)
+            lat, lon, alt, vs, gs, gforce = (
+                finite_num(v) for v in (lat, lon, alt, vs, gs, gforce)
+            )
 
             # Null-guard — SimConnect returns None on timeout
             if on_ground is None:
@@ -289,7 +300,7 @@ class SimConnectWorker(threading.Thread):
             "elapsed_seconds": elapsed,
             "max_altitude_ft": round(self._flight.get("max_alt", 0), 0),
             "landing_vs_fpm": round(landing_vs, 1) if landing_vs is not None else None,
-            "landing_g_force": round(float(gforce), 2) if gforce is not None else None,
+            "landing_g_force": finite_num(gforce, 2),
             "notes": None,
         }
 

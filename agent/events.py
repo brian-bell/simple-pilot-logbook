@@ -146,11 +146,11 @@ def position_event(
         "flight.position",
         {
             "flight_uuid": flight_uuid,
-            "lat": _num(lat),
-            "lon": _num(lon),
-            "altitude_ft": _num(altitude_ft, 0),
-            "vs_fpm": _num(vs_fpm, 0),
-            "ground_speed_kt": _num(ground_speed_kt, 1),
+            "lat": finite_num(lat),
+            "lon": finite_num(lon),
+            "altitude_ft": finite_num(altitude_ft, 0),
+            "vs_fpm": finite_num(vs_fpm, 0),
+            "ground_speed_kt": finite_num(ground_speed_kt, 1),
             "elapsed_seconds": int(elapsed_seconds),
         },
     )
@@ -177,7 +177,8 @@ def legacy_import_event(row: dict[str, Any]) -> dict[str, Any]:
     return event
 
 
-def _num(value: Any, ndigits: int | None = None) -> float | None:
+def finite_num(value: Any, ndigits: int | None = None) -> float | None:
+    """Float for a SimVar reading, or None when it is missing, non-numeric, NaN or infinite."""
     if value is None:
         return None
     try:

@@ -64,7 +64,8 @@ class Outbox:
 
     def enqueue(self, event: dict[str, Any]) -> bool:
         """Store an event. Returns False when an event with the same id is already queued."""
-        body = json.dumps(event, separators=(",", ":"), ensure_ascii=False)
+        # allow_nan=False: a NaN/Infinity token would be rejected by the Worker and dead-lettered.
+        body = json.dumps(event, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
         created_at = str(event.get("ts") or datetime.now(timezone.utc).isoformat())
         with closing(self._connect()) as conn, conn:
             cur = conn.execute(
