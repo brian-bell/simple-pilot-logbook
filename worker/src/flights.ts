@@ -23,16 +23,19 @@ export async function listFlights(env: Env, params: URLSearchParams): Promise<Re
   return json({ flights: rows.results ?? [], total, limit, offset });
 }
 
+/** Same 404 body the old FastAPI backend produced, for clients that inspect `detail`. */
+const NOT_FOUND = { detail: "Flight not found" };
+
 /** GET /api/flights/:id -> flight row or 404 */
 export async function getFlight(env: Env, id: number): Promise<Response> {
   const row = await env.DB.prepare("SELECT * FROM flights WHERE id = ?1").bind(id).first();
-  if (!row) return json({ error: "flight not found" }, 404);
+  if (!row) return json(NOT_FOUND, 404);
   return json(row);
 }
 
 /** DELETE /api/flights/:id -> { deleted: id } or 404. Event rows are kept for audit. */
 export async function deleteFlight(env: Env, id: number): Promise<Response> {
   const result = await env.DB.prepare("DELETE FROM flights WHERE id = ?1").bind(id).run();
-  if ((result.meta?.changes ?? 0) === 0) return json({ error: "flight not found" }, 404);
+  if ((result.meta?.changes ?? 0) === 0) return json(NOT_FOUND, 404);
   return json({ deleted: id });
 }
