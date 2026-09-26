@@ -3,6 +3,8 @@
  *
  * Polls /api/status every 3 s for live SimConnect state.
  * Polls /api/flights every 10 s (and on first load) for the logbook table.
+ * Every /api call carries a bearer token (the "viewer token") that is kept in
+ * localStorage; a 401 brings up the sign-in overlay and pauses polling.
  * All DOM manipulation is vanilla JS — no build step, no dependencies.
  */
 
@@ -22,6 +24,96 @@ const FLIGHTS_INTERVAL = 10_000; // ms between logbook refreshes
 let _flights = [];
 let _sortCol = "date";
 let _sortDir = "desc";   // "asc" | "desc"
+let _statusTimer = null;
+let _flightsTimer = null;
+
+// ---------------------------------------------------------------------------
+// Auth – viewer token stored in localStorage, sent as a bearer token
+// ---------------------------------------------------------------------------
+
+const TOKEN_KEY = "spl_viewer_token";
+
+class UnauthorizedError extends Error {}
+
+function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
+}
+function setToken(token) {
+  try { localStorage.setItem(TOKEN_KEY, token); } catch { /* storage unavailable */ }
+}
+function clearToken() {
+  try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
+}
+
+/**
+ * fetch() wrapper that adds the Authorization header.
+ * Throws UnauthorizedError when no token is saved or the server answers 401.
+ * @param {string} path
+ * @param {RequestInit} [init]
+ */
+async function apiFetch(path, init = {}) {
+  const token = getToken();
+  if (!token) throw new UnauthorizedError("no token");
+  const headers = new Headers(init.headers || {});
+  headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(path, { ...init, headers });
+  if (res.status === 401) throw new UnauthorizedError("rejected");
+  return res;
+}
+
+/** Show the sign-in overlay, stop polling, and reset the status indicator. */
+function showAuth(message) {
+  stopPolling();
+  document.getElementById("auth-error").textContent = message || "";
+  document.getElementById("auth-overlay").classList.remove("hidden");
+  document.getElementById("btn-signout").classList.add("hidden");
+  applyStatus({ connected: false, state: "DISCONNECTED", current_flight: null, agent_seen_at: null });
+  document.getElementById("status-label").textContent = "Signed out";
+  const input = document.getElementById("auth-token");
+  input.value = "";
+  input.focus();
+}
+
+function hideAuth() {
+  document.getElementById("auth-overlay").classList.add("hidden");
+  document.getElementById("btn-signout").classList.remove("hidden");
+}
+
+/** Save a token, verify it against /api/status, then start polling. */
+async function signIn(token) {
+  setToken(token);
+  try {
+    const res = await apiFetch("/api/status");
+    if (!res.ok) throw new Error(res.status);
+  } catch (err) {
+    clearToken();
+    showAuth(err instanceof UnauthorizedError ? "Invalid token." : "Could not reach the server.");
+    return;
+  }
+  hideAuth();
+  startPolling();
+}
+
+function signOut() {
+  clearToken();
+  _flights = [];
+  renderTable();
+  document.getElementById("flight-count").textContent = "";
+  showAuth("");
+}
+
+function startPolling() {
+  if (_statusTimer !== null) return;
+  pollStatus();
+  loadFlights();
+  _statusTimer  = setInterval(pollStatus, STATUS_INTERVAL);
+  _flightsTimer = setInterval(loadFlights, FLIGHTS_INTERVAL);
+}
+
+function stopPolling() {
+  if (_statusTimer !== null)  { clearInterval(_statusTimer);  _statusTimer = null; }
+  if (_flightsTimer !== null) { clearInterval(_flightsTimer); _flightsTimer = null; }
+}
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -132,16 +224,27 @@ function routeLabel(flight, which) {
 
 async function pollStatus() {
   try {
-    const res = await fetch("/api/status");
+    const res = await apiFetch("/api/status");
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
     applyStatus(data);
-  } catch {
-    applyStatus({ connected: false, state: "DISCONNECTED", current_flight: null });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      showAuth("Token rejected. Enter a valid viewer token.");
+      return;
+    }
+    applyStatus({ connected: false, state: "DISCONNECTED", current_flight: null, agent_seen_at: null });
   }
 }
 
-function applyStatus({ connected, state, current_flight }) {
+/** True when the agent has heartbeated within the last minute. */
+function agentRecentlySeen(agentSeenAt) {
+  if (!agentSeenAt) return false;
+  const seen = Date.parse(agentSeenAt);
+  return !isNaN(seen) && (Date.now() - seen) < 60_000;
+}
+
+function applyStatus({ connected, state, current_flight, agent_seen_at }) {
   const dot   = document.getElementById("status-dot");
   const label = document.getElementById("status-label");
 
@@ -154,7 +257,8 @@ function applyStatus({ connected, state, current_flight }) {
     label.textContent = "Connected";
   } else {
     dot.classList.add("disconnected");
-    label.textContent = "Disconnected";
+    // Agent heartbeating but MSFS closed → "Disconnected"; no agent at all → "Agent offline".
+    label.textContent = agentRecentlySeen(agent_seen_at) ? "Disconnected" : "Agent offline";
   }
 
   const banner = document.getElementById("active-banner");
@@ -180,7 +284,7 @@ function applyStatus({ connected, state, current_flight }) {
 
 async function loadFlights() {
   try {
-    const res = await fetch("/api/flights?limit=200");
+    const res = await apiFetch("/api/flights?limit=200");
     if (!res.ok) throw new Error(res.status);
     const { flights, total } = await res.json();
     _flights = flights;
@@ -188,8 +292,12 @@ async function loadFlights() {
 
     const countEl = document.getElementById("flight-count");
     countEl.textContent = total > 0 ? `${total} flight${total !== 1 ? "s" : ""}` : "";
-  } catch {
-    // silently ignore – table stays as-is
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      showAuth("Token rejected. Enter a valid viewer token.");
+      return;
+    }
+    // otherwise silently ignore – table stays as-is
   }
 }
 
@@ -323,7 +431,7 @@ document.getElementById("flight-rows").addEventListener("click", async e => {
   const id = btn.dataset.id;
   if (!confirm("Delete this flight entry?")) return;
   try {
-    const res = await fetch(`/api/flights/${id}`, { method: "DELETE" });
+    const res = await apiFetch(`/api/flights/${id}`, { method: "DELETE" });
     if (res.ok) {
       _flights = _flights.filter(f => String(f.id) !== id);
       renderTable();
@@ -331,7 +439,9 @@ document.getElementById("flight-rows").addEventListener("click", async e => {
       document.getElementById("flight-count").textContent =
         total > 0 ? `${total} flight${total !== 1 ? "s" : ""}` : "";
     }
-  } catch { /* ignore */ }
+  } catch (err) {
+    if (err instanceof UnauthorizedError) showAuth("Token rejected. Enter a valid viewer token.");
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -439,8 +549,19 @@ document.addEventListener("keydown", e => {
 // Bootstrap
 // ---------------------------------------------------------------------------
 
-pollStatus();
-loadFlights();
+document.getElementById("auth-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const token = document.getElementById("auth-token").value.trim();
+  if (!token) return;
+  document.getElementById("auth-error").textContent = "";
+  signIn(token);
+});
 
-setInterval(pollStatus, STATUS_INTERVAL);
-setInterval(loadFlights, FLIGHTS_INTERVAL);
+document.getElementById("btn-signout").addEventListener("click", signOut);
+
+if (getToken()) {
+  hideAuth();
+  startPolling();
+} else {
+  showAuth("");
+}

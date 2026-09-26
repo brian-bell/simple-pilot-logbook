@@ -2,8 +2,9 @@
 SimConnect background worker.
 
 Runs as a daemon thread, polling MSFS every 2 seconds.
-Implements a simple state machine to detect takeoffs and landings,
-then writes completed flights to the SQLite database.
+Implements a simple state machine to detect takeoffs and landings and hands
+the resulting events (flight.takeoff / flight.position / flight.landing) to
+the `on_event` callback, which queues them for upload to the Worker.
 
 States
 ------
@@ -15,11 +16,19 @@ AIRBORNE      – Aircraft in the air
 import threading
 import time
 import logging
+import uuid
 from collections import deque
 from datetime import datetime, timezone
+from typing import Callable
 
 from airports import find_nearest_airport, haversine_nm
-from database import insert_flight
+from events import (
+    decode_simvar_str,
+    finite_num,
+    landing_event,
+    position_event,
+    takeoff_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +53,21 @@ _MIN_FLIGHT_SECONDS = 30
 # peak descent rate just before touchdown.
 _VS_WINDOW_SECONDS = 6
 
+# Default interval between flight.position events while airborne.
+_DEFAULT_POSITION_SECONDS = 10.0
+
 
 class SimConnectWorker(threading.Thread):
     """
-    Daemon thread that monitors MSFS via SimConnect and records flights.
+    Daemon thread that monitors MSFS via SimConnect and emits flight events.
+
+    Parameters
+    ----------
+    on_event : callable(dict) or None
+        Receives each event envelope (see events.py). Exceptions it raises are
+        logged and never propagate into the polling loop.
+    position_seconds : float
+        Interval between flight.position events while airborne.
 
     Public attributes
     -----------------
@@ -56,10 +76,17 @@ class SimConnectWorker(threading.Thread):
         Keys: connected, state, current_flight (dict or None).
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        on_event: Callable[[dict], None] | None = None,
+        position_seconds: float = _DEFAULT_POSITION_SECONDS,
+    ) -> None:
         super().__init__(daemon=True, name="simconnect-worker")
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        self._on_event = on_event
+        self._position_seconds = float(position_seconds)
+        self._last_position_emit = 0.0
 
         # Shared status dict read by the API
         self.status: dict = {
@@ -131,6 +158,11 @@ class SimConnectWorker(threading.Thread):
                 logger.warning("SimConnect read error: %s", exc)
                 raise  # bubble up to trigger reconnect
 
+            # NaN/inf readings become None so they never reach an event (JSON has no NaN)
+            lat, lon, alt, vs, gs, gforce = (
+                finite_num(v) for v in (lat, lon, alt, vs, gs, gforce)
+            )
+
             # Null-guard — SimConnect returns None on timeout
             if on_ground is None:
                 self._stop_event.wait(2)
@@ -164,6 +196,12 @@ class SimConnectWorker(threading.Thread):
                             self.status["current_flight"]["altitude_ft"] = (
                                 round(float(alt), 0) if alt is not None else None
                             )
+                    # Periodic track point for the Worker
+                    if now - self._last_position_emit >= self._position_seconds:
+                        self._last_position_emit = now
+                        self._emit(position_event(
+                            self._flight.get("flight_uuid"), lat, lon, alt, vs, gs, elapsed,
+                        ))
                 else:
                     self._handle_landing(lat, lon, gforce)
 
@@ -185,18 +223,22 @@ class SimConnectWorker(threading.Thread):
             dep_airport = find_nearest_airport(float(lat), float(lon))
 
         self._flight = {
+            "flight_uuid": str(uuid.uuid4()),
             "takeoff_ts": time.time(),
             "takeoff_wall": datetime.now(timezone.utc).isoformat(),
             "departure_lat": float(lat) if lat is not None else None,
             "departure_lon": float(lon) if lon is not None else None,
             "departure_icao": dep_airport["icao"] if dep_airport else None,
             "departure_name": dep_airport["name"] if dep_airport else None,
-            "aircraft_title": str(title) if title else None,
-            "aircraft_registration": str(reg).strip() if reg else None,
+            # SimConnect returns bytes for string SimVars — decode, don't str()
+            "aircraft_title": decode_simvar_str(title),
+            "aircraft_registration": decode_simvar_str(reg),
             "max_alt": float(alt) if alt is not None else 0.0,
         }
         self._vs_window.clear()
         self._state = "AIRBORNE"
+        # First flight.position follows one interval after the takeoff event.
+        self._last_position_emit = time.monotonic()
 
         with self._lock:
             self.status["state"] = "AIRBORNE"
@@ -210,6 +252,8 @@ class SimConnectWorker(threading.Thread):
                 "elapsed_seconds": 0,
                 "altitude_ft": float(alt) if alt is not None else None,
             }
+
+        self._emit(takeoff_event(self._flight))
 
     def _handle_landing(self, lat, lon, gforce) -> None:
         """Record arrival data, persist flight, transition to ON_GROUND."""
@@ -256,14 +300,18 @@ class SimConnectWorker(threading.Thread):
             "elapsed_seconds": elapsed,
             "max_altitude_ft": round(self._flight.get("max_alt", 0), 0),
             "landing_vs_fpm": round(landing_vs, 1) if landing_vs is not None else None,
-            "landing_g_force": round(float(gforce), 2) if gforce is not None else None,
+            "landing_g_force": finite_num(gforce, 2),
+            "notes": None,
         }
 
-        try:
-            fid = insert_flight(flight_data)
-            logger.info("Flight #%d recorded to database.", fid)
-        except Exception as exc:
-            logger.error("Failed to save flight: %s", exc)
+        flight_data["flight_uuid"] = self._flight.get("flight_uuid")
+        self._emit(landing_event(flight_data))
+        logger.info(
+            "Flight %s -> %s (%d s) queued for upload.",
+            flight_data["departure_icao"] or "?",
+            flight_data["arrival_icao"] or "?",
+            elapsed,
+        )
 
         self._flight = {}
         self._vs_window.clear()
@@ -273,6 +321,15 @@ class SimConnectWorker(threading.Thread):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _emit(self, event: dict) -> None:
+        """Hand an event to the outbox; a queuing problem must never kill the poller."""
+        if self._on_event is None:
+            return
+        try:
+            self._on_event(event)
+        except Exception:
+            logger.exception("Failed to queue %s event", event.get("type"))
 
     def _update_status(
         self,

@@ -3,11 +3,11 @@ setlocal
 
 echo.
 echo  ====================================================
-echo   Simple Pilot Logbook
+echo   Simple Pilot Logbook - local agent
 echo  ====================================================
 echo.
 
-cd /d "%~dp0backend"
+cd /d "%~dp0agent"
 
 echo  Checking Python...
 python --version 2>NUL
@@ -18,15 +18,32 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if not exist ".env" (
+    copy /y ".env.example" ".env" >NUL
+    echo  [SETUP] Created agent\.env from .env.example.
+    echo          Edit it, set WORKER_URL and AGENT_TOKEN, then run start.bat again.
+    echo          See docs\cloud-deploy.md for where those values come from.
+    pause
+    exit /b 1
+)
+
 echo  Installing dependencies...
 python -m pip install -r requirements.txt --quiet
 
-echo  Starting server on http://localhost:8080
-echo  (Press Ctrl+C or close this window to stop)
+set "WORKER_URL="
+for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+    if /i "%%A"=="WORKER_URL" set "WORKER_URL=%%B"
+)
+if defined WORKER_URL set "WORKER_URL=%WORKER_URL:"=%"
+
+if defined WORKER_URL (
+    echo  Logbook: %WORKER_URL%
+    start "" "%WORKER_URL%"
+)
+
+echo  Starting agent ^(Ctrl+C or close this window to stop^)
 echo.
 
-start "" "http://localhost:8080"
-
-python -m uvicorn main:app --host 0.0.0.0 --port 8080
+python main.py
 
 pause

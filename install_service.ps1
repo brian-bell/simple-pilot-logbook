@@ -138,14 +138,26 @@ else:
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backendDir = Join-Path $repoRoot "backend"
-$serviceScript = Join-Path $backendDir "windows_service.py"
+$agentDir = Join-Path $repoRoot "agent"
+$serviceScript = Join-Path $agentDir "windows_service.py"
+$envFile = Join-Path $agentDir ".env"
 $pythonCmd = Get-PythonCommand -Preferred $PythonCommand
 $pythonCmdDisplay = $pythonCmd -join " "
 $serviceExists = $null -ne (Get-Service -Name "SimplePilotLogbook" -ErrorAction SilentlyContinue)
 
 if (-not (Test-Path $serviceScript)) {
     throw "Service script not found: $serviceScript"
+}
+
+if (-not (Test-Path $envFile)) {
+    throw "agent\.env not found. Copy agent\.env.example to agent\.env and set WORKER_URL and AGENT_TOKEN first (see docs\cloud-deploy.md)."
+}
+
+$workerUrl = Get-Content $envFile |
+    Where-Object { $_ -match '^\s*WORKER_URL\s*=' } |
+    Select-Object -First 1
+if ($workerUrl) {
+    $workerUrl = ($workerUrl -replace '^\s*WORKER_URL\s*=\s*', '').Trim().Trim('"', "'")
 }
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -156,8 +168,8 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Write-Step "Checking Python"
 Invoke-PythonCommand -Command $pythonCmd -Arguments @("--version")
 
-Write-Step "Installing backend dependencies"
-Invoke-PythonCommand -Command $pythonCmd -Arguments @("-m", "pip", "install", "-r", (Join-Path $backendDir "requirements.txt"))
+Write-Step "Installing agent dependencies"
+Invoke-PythonCommand -Command $pythonCmd -Arguments @("-m", "pip", "install", "-r", (Join-Path $agentDir "requirements.txt"))
 
 Write-Step "Installing pywin32 for Windows service support"
 Invoke-PythonCommand -Command $pythonCmd -Arguments @("-m", "pip", "install", "pywin32")
@@ -179,8 +191,11 @@ Invoke-PythonCommand -Command $pythonCmd -Arguments @($serviceScript, "restart")
 
 Write-Step "Done"
 Write-Host "Service name : SimplePilotLogbook"
-Write-Host "App URL      : http://localhost:8080"
-Write-Host "Service log  : $(Join-Path $backendDir 'service.log')"
+if ($workerUrl) {
+    Write-Host "Logbook URL  : $workerUrl"
+}
+Write-Host "Service log  : $(Join-Path $agentDir 'service.log')"
+Write-Host "Agent log    : $(Join-Path $agentDir 'agent.log')"
 Write-Host "Remove later : $pythonCmdDisplay $serviceScript stop"
 Write-Host "               $pythonCmdDisplay $serviceScript remove"
 
