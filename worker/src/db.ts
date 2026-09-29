@@ -107,17 +107,18 @@ export function upsertStatus(db: D1Database, payload: Record<string, unknown>): 
   const connected = payload.connected === true ? 1 : 0;
   const state = typeof payload.state === "string" ? payload.state.slice(0, 32) : "DISCONNECTED";
   const onGround = payload.on_ground === true ? 1 : 0;
+  const paused = payload.paused === true ? 1 : 0;
   const cf = payload.current_flight;
   const currentFlightJson = cf && typeof cf === "object" && !Array.isArray(cf) ? JSON.stringify(cf) : null;
 
   return db
     .prepare(
-      "INSERT INTO agent_status (id, updated_at, connected, state, current_flight_json, on_ground) " +
-        "VALUES (1, ?1, ?2, ?3, ?4, ?5) " +
+      "INSERT INTO agent_status (id, updated_at, connected, state, current_flight_json, on_ground, paused) " +
+        "VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6) " +
         "ON CONFLICT (id) DO UPDATE SET " +
         "updated_at = excluded.updated_at, connected = excluded.connected, " +
         "state = excluded.state, current_flight_json = excluded.current_flight_json, " +
-        "on_ground = excluded.on_ground",
+        "on_ground = excluded.on_ground, paused = excluded.paused",
     )
-    .bind(new Date().toISOString(), connected, state, currentFlightJson, onGround);
+    .bind(new Date().toISOString(), connected, state, currentFlightJson, onGround, paused);
 }

@@ -183,6 +183,8 @@ export class FlightDetector {
   private outSinceMono: number | null = null;
   private lastSimRate: number | null = null;
   private lastSample: StateSample | null = null;
+  /** Set when a pause starts while a flight or a parked aircraft is live; cleared by unpause or the main menu. */
+  private pausedInFlight = false;
 
   private readonly clock: Clock;
   private readonly nearest: (lat: number, lon: number) => NearestAirport | null;
@@ -202,6 +204,7 @@ export class FlightDetector {
     this.sim = info;
     this.simRunning = null;
     this.phase = "SYNC";
+    this.pausedInFlight = false;
     this.resetSampling();
   }
 
@@ -209,6 +212,7 @@ export class FlightDetector {
   disconnected(reason: string): void {
     this.endFlightInProgress(`sim disconnected (${reason})`);
     this.phase = "DISCONNECTED";
+    this.pausedInFlight = false;
     this.sim = null;
     this.resetSampling();
   }
@@ -244,6 +248,11 @@ export class FlightDetector {
         break;
       case "pause":
         log.info(`Pause_EX1 flags=${event.flags} (${describePause(event.flags)}).`);
+        // Samples stop while paused, so decide from what was live when the pause began.
+        this.pausedInFlight =
+          event.flags !== 0 &&
+          this.outSinceMono === null &&
+          (this.pausedInFlight || this.flight !== null || this.liveOnGround());
         break;
       case "crashed":
         log.warn("Sim reported a crash.");
@@ -287,6 +296,7 @@ export class FlightDetector {
     }
 
     if (cls === "out") {
+      this.pausedInFlight = false; // placeholder position: back in the main menu
       this.outSinceMono ??= sample.mono;
       if (this.flight && sample.mono - this.outSinceMono >= ABANDON_AFTER_MS) {
         this.opts.log.info("Aircraft has been out of the flight for 90 s.");
@@ -330,10 +340,12 @@ export class FlightDetector {
 
   status(): AgentStatus {
     if (this.phase === "DISCONNECTED") {
-      return { connected: false, state: "DISCONNECTED", on_ground: false, current_flight: null };
+      return { connected: false, state: "DISCONNECTED", on_ground: false, paused: false, current_flight: null };
     }
     const f = this.flight;
-    if (!f) return { connected: true, state: "ON_GROUND", on_ground: this.liveOnGround(), current_flight: null };
+    if (!f) {
+      return { connected: true, state: "ON_GROUND", on_ground: this.liveOnGround(), paused: this.pausedInFlight, current_flight: null };
+    }
     const current: CurrentFlight = {
       departure_icao: f.departure?.icao ?? null,
       departure_name: f.departure?.name ?? null,
@@ -344,7 +356,7 @@ export class FlightDetector {
       elapsed_seconds: Math.max(0, Math.trunc((this.clock.wall() - f.takeoffWall) / 1000)),
       altitude_ft: finiteNum(f.lastLive.altitudeFt, 0),
     };
-    return { connected: true, state: "AIRBORNE", on_ground: false, current_flight: current };
+    return { connected: true, state: "AIRBORNE", on_ground: false, paused: this.pausedInFlight, current_flight: current };
   }
 
   // ------------------------------------------------------------------
