@@ -244,12 +244,15 @@ function agentRecentlySeen(agentSeenAt) {
   return !isNaN(seen) && (Date.now() - seen) < 60_000;
 }
 
-function applyStatus({ connected, state, on_ground, current_flight, agent_seen_at }) {
+function applyStatus({ connected, state, on_ground, paused, current_flight, agent_seen_at }) {
   const dot   = document.getElementById("status-dot");
   const label = document.getElementById("status-label");
 
   dot.className = "status-dot";
-  if (state === "AIRBORNE") {
+  if (connected && paused) {
+    dot.classList.add("paused");
+    label.textContent = "Paused";
+  } else if (state === "AIRBORNE") {
     dot.classList.add("airborne");
     label.textContent = "In Flight";
   } else if (connected && on_ground) {

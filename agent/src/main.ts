@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     await Promise.race([sender.stop(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     // Best-effort final heartbeat so the UI flips to offline immediately.
     await sender.postNow(
-      heartbeatEvent({ connected: false, state: "DISCONNECTED", on_ground: false, current_flight: null }, outbox.pendingCount()),
+      heartbeatEvent({ connected: false, state: "DISCONNECTED", on_ground: false, paused: false, current_flight: null }, outbox.pendingCount()),
       3000,
     );
     log.info(`Agent stopped. ${outbox.pendingCount()} event(s) still queued.`);

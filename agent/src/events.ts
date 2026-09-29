@@ -48,6 +48,8 @@ export interface AgentStatus {
   state: "DISCONNECTED" | "ON_GROUND" | "AIRBORNE";
   /** True only once a live sample confirmed the aircraft on the ground (not in the menu or while loading). */
   on_ground: boolean;
+  /** True while the sim is paused during a flight (Pause_EX1), not in the main menu. */
+  paused: boolean;
   current_flight: CurrentFlight | null;
 }
 
@@ -96,6 +98,7 @@ export function heartbeatEvent(status: AgentStatus, outboxPending: number): Agen
     connected: Boolean(status.connected),
     state: status.state || "DISCONNECTED",
     on_ground: Boolean(status.on_ground),
+    paused: Boolean(status.paused),
     current_flight: status.current_flight,
     outbox_pending: Math.trunc(outboxPending),
   });
