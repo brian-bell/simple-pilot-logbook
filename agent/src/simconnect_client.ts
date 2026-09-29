@@ -335,6 +335,18 @@ function simLabel(open: RecvOpen): string {
   }
 }
 
+/**
+ * Text for a connection error. Connecting to "localhost" tries ::1 and 127.0.0.1,
+ * and Node reports both refusals as an AggregateError with an empty message.
+ */
+function describeError(err: unknown): string {
+  const e = err as (Error & { code?: string; errors?: unknown[] }) | null;
+  if (e?.message) return e.message;
+  const inner = Array.isArray(e?.errors) ? e.errors.map((x) => (x as Error)?.message).filter(Boolean) : [];
+  if (inner.length) return inner.join(", ");
+  return e?.code ?? e?.name ?? String(err);
+}
+
 /** Connection failures that mean "nothing is listening", as opposed to a protocol problem. */
 function isNotRunningError(err: unknown): boolean {
   const code = (err as { code?: string } | null)?.code;
@@ -419,7 +431,7 @@ export class SimConnectClient {
           this.onOpened(conn, recvOpen, endpoint, protocol);
           return;
         } catch (err) {
-          failures.push(`${endpoint.label} [${Protocol[protocol]}]: ${(err as Error).message}`);
+          failures.push(`${endpoint.label} [${Protocol[protocol]}]: ${describeError(err)}`);
           if (isNotRunningError(err)) break; // nothing listening: the older protocol will not help
         }
       }
