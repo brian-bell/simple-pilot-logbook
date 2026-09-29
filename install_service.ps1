@@ -137,8 +137,8 @@ Write-Host $wrapperXml
 
 if ($existing) {
     Write-Step "Updating the existing service"
-    & $wrapperExe stop | Out-Null
-    Invoke-Checked -Exe $wrapperExe -Arguments @("refresh")
+    # WinSW 2.x has no "refresh"; it re-reads the XML on every start.
+    & $wrapperExe stopwait | Out-Null
 }
 else {
     Write-Step "Registering the service"
