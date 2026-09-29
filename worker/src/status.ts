@@ -17,16 +17,18 @@ interface StatusRow {
   connected: number;
   state: string;
   current_flight_json: string | null;
+  on_ground: number;
 }
 
 export async function getStatus(env: Env): Promise<Response> {
   const row = await env.DB.prepare(
-    "SELECT updated_at, connected, state, current_flight_json FROM agent_status WHERE id = 1",
+    "SELECT updated_at, connected, state, current_flight_json, on_ground FROM agent_status WHERE id = 1",
   ).first<StatusRow>();
 
   const offline = {
     connected: false,
     state: "DISCONNECTED",
+    on_ground: false,
     current_flight: null,
     agent_seen_at: row?.updated_at ?? null,
   };
@@ -56,6 +58,7 @@ export async function getStatus(env: Env): Promise<Response> {
   return json({
     connected: row.connected === 1,
     state: row.state,
+    on_ground: row.connected === 1 && row.state === "ON_GROUND" && row.on_ground === 1,
     current_flight: currentFlight,
     agent_seen_at: row.updated_at,
   });

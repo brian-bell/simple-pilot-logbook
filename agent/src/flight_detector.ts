@@ -321,9 +321,11 @@ export class FlightDetector {
   // ------------------------------------------------------------------
 
   status(): AgentStatus {
-    if (this.phase === "DISCONNECTED") return { connected: false, state: "DISCONNECTED", current_flight: null };
+    if (this.phase === "DISCONNECTED") {
+      return { connected: false, state: "DISCONNECTED", on_ground: false, current_flight: null };
+    }
     const f = this.flight;
-    if (!f) return { connected: true, state: "ON_GROUND", current_flight: null };
+    if (!f) return { connected: true, state: "ON_GROUND", on_ground: this.phase === "ON_GROUND", current_flight: null };
     const current: CurrentFlight = {
       departure_icao: f.departure?.icao ?? null,
       departure_name: f.departure?.name ?? null,
@@ -334,7 +336,7 @@ export class FlightDetector {
       elapsed_seconds: Math.max(0, Math.trunc((this.clock.wall() - f.takeoffWall) / 1000)),
       altitude_ft: finiteNum(f.lastLive.altitudeFt, 0),
     };
-    return { connected: true, state: "AIRBORNE", current_flight: current };
+    return { connected: true, state: "AIRBORNE", on_ground: false, current_flight: current };
   }
 
   // ------------------------------------------------------------------
