@@ -320,10 +320,20 @@ export class FlightDetector {
   // Output
   // ------------------------------------------------------------------
 
+  /**
+   * Parked with a recent live sample. Menu, loading and placeholder samples leave the
+   * phase at ON_GROUND (only the next live sample resyncs), so a stale one means "not in a flight".
+   */
+  private liveOnGround(): boolean {
+    return this.phase === "ON_GROUND" && this.lastLiveMono !== null && this.clock.mono() - this.lastLiveMono < RESYNC_GAP_MS;
+  }
+
   status(): AgentStatus {
-    if (this.phase === "DISCONNECTED") return { connected: false, state: "DISCONNECTED", current_flight: null };
+    if (this.phase === "DISCONNECTED") {
+      return { connected: false, state: "DISCONNECTED", on_ground: false, current_flight: null };
+    }
     const f = this.flight;
-    if (!f) return { connected: true, state: "ON_GROUND", current_flight: null };
+    if (!f) return { connected: true, state: "ON_GROUND", on_ground: this.liveOnGround(), current_flight: null };
     const current: CurrentFlight = {
       departure_icao: f.departure?.icao ?? null,
       departure_name: f.departure?.name ?? null,
@@ -334,7 +344,7 @@ export class FlightDetector {
       elapsed_seconds: Math.max(0, Math.trunc((this.clock.wall() - f.takeoffWall) / 1000)),
       altitude_ft: finiteNum(f.lastLive.altitudeFt, 0),
     };
-    return { connected: true, state: "AIRBORNE", current_flight: current };
+    return { connected: true, state: "AIRBORNE", on_ground: false, current_flight: current };
   }
 
   // ------------------------------------------------------------------

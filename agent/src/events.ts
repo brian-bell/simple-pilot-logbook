@@ -42,10 +42,12 @@ export interface AgentEvent {
   payload: Record<string, unknown>;
 }
 
-/** Live status shared by the heartbeat and GET /api/status (shape must not change). */
+/** Live status shared by the heartbeat and GET /api/status (fields may be added, never renamed or removed). */
 export interface AgentStatus {
   connected: boolean;
   state: "DISCONNECTED" | "ON_GROUND" | "AIRBORNE";
+  /** True only once a live sample confirmed the aircraft on the ground (not in the menu or while loading). */
+  on_ground: boolean;
   current_flight: CurrentFlight | null;
 }
 
@@ -93,6 +95,7 @@ export function heartbeatEvent(status: AgentStatus, outboxPending: number): Agen
   return makeEvent("agent.heartbeat", {
     connected: Boolean(status.connected),
     state: status.state || "DISCONNECTED",
+    on_ground: Boolean(status.on_ground),
     current_flight: status.current_flight,
     outbox_pending: Math.trunc(outboxPending),
   });

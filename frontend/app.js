@@ -244,7 +244,7 @@ function agentRecentlySeen(agentSeenAt) {
   return !isNaN(seen) && (Date.now() - seen) < 60_000;
 }
 
-function applyStatus({ connected, state, current_flight, agent_seen_at }) {
+function applyStatus({ connected, state, on_ground, current_flight, agent_seen_at }) {
   const dot   = document.getElementById("status-dot");
   const label = document.getElementById("status-label");
 
@@ -252,6 +252,9 @@ function applyStatus({ connected, state, current_flight, agent_seen_at }) {
   if (state === "AIRBORNE") {
     dot.classList.add("airborne");
     label.textContent = "In Flight";
+  } else if (connected && on_ground) {
+    dot.classList.add("on-ground");
+    label.textContent = "On Ground";
   } else if (connected) {
     dot.classList.add("connected");
     label.textContent = "Connected";
