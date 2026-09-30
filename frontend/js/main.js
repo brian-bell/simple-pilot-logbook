@@ -159,11 +159,21 @@ function applyStatus({ connected, state, on_ground, paused, current_flight, agen
 // Flights table
 // ---------------------------------------------------------------------------
 
+/** The Worker returns at most 500 flights per page. */
+const FLIGHTS_PAGE_SIZE = 500;
+
 async function loadFlights() {
   try {
-    const res = await apiFetch("/api/flights?limit=200");
-    if (!res.ok) throw new Error(res.status);
-    const { flights, total } = await res.json();
+    const flights = [];
+    let total = 0;
+    for (;;) {
+      const res = await apiFetch(`/api/flights?limit=${FLIGHTS_PAGE_SIZE}&offset=${flights.length}`);
+      if (!res.ok) throw new Error(res.status);
+      const page = await res.json();
+      flights.push(...page.flights);
+      total = page.total;
+      if (page.flights.length === 0 || flights.length >= total) break;
+    }
     _flights = flights;
     renderTable();
 
