@@ -16,8 +16,9 @@ Only when something under `worker/` or `frontend/` changed since the last deploy
 ## Steps
 Stop at the first failure and report it; do not deploy past a red step.
 
-1. Get the latest `main`:
+1. Get the latest `main` on a clean worktree, so no local edits or untracked files under `worker/` or `frontend/` get deployed:
    ```sh
+   git status --porcelain    # must print nothing; otherwise stop
    git fetch origin main && git checkout main && git pull --ff-only origin main
    ```
 2. Checks:
