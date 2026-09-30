@@ -73,10 +73,6 @@ All commands below run from the `worker/` directory.
 
 10. Open the URL in a browser and enter the viewer token when prompted. It is kept in that browser's localStorage; use **Sign out** in the header to forget it.
 
-## Importing the old local logbook
-
-The one-off importer for the pre-Cloudflare `backend\logbook.db` (`agent\import_legacy.py`) was retired together with the Python agent after the migration was completed. It is still in git history at commit `84af342`; check out that commit and follow this document's version there if you need to import another old database.
-
 ## Backups
 
 Two ways to get the logbook out of D1:
@@ -103,7 +99,7 @@ Run a backup on demand locally with `npx wrangler dev --test-scheduled`, then op
 - Worker or frontend changed: `cd worker && npx wrangler deploy` (the frontend is uploaded as static assets with the Worker).
 - First deploy with the nightly backup: create the R2 bucket first (One-time setup step 5), otherwise `wrangler deploy` fails on the missing `BACKUPS` binding.
 - Schema changed: add a file under `worker/migrations/` (`npx wrangler d1 migrations create simple-pilot-logbook <name>`), then `npm run migrate:remote` before deploying.
-- Agent changed: pull on the sim PC and rerun `.\install_service.ps1` as Administrator (rebuilds and restarts the service), or run `start.bat`.
+- Agent changed: pull on the sim PC and rerun `.\install_service.ps1` as Administrator (see [service-install.md](service-install.md)), or run `start.bat`.
 
 ## Local development
 
@@ -125,14 +121,13 @@ curl -H "Authorization: Bearer dev-viewer" http://localhost:8787/api/status
 
 ## Rotating tokens
 
-Run `npx wrangler secret put AGENT_TOKEN` (or `VIEWER_TOKEN`) with a new value and redeploy is not required — secrets take effect immediately. Then update `agent\.env` and restart the agent, or sign out and back in on the web UI.
+Run `npx wrangler secret put AGENT_TOKEN` (or `VIEWER_TOKEN`) with a new value; no redeploy is needed. Then update `agent\.env` and restart the agent, or sign out and back in on the web UI.
 
 ## Troubleshooting
 
+Agent-side problems (status, SimConnect, missing flights) are covered in the [README](../README.md#troubleshooting).
+
 - **Web UI keeps asking for a token**: the viewer token does not match the `VIEWER_TOKEN` secret. Check with `curl -H "Authorization: Bearer <token>" https://<worker>/api/status` (expect JSON, not 401).
-- **Status shows "Agent offline"**: no heartbeat reached the Worker in the last minute. Check the service is running and `agent\agent.log`.
-- **Status shows "Disconnected"**: the agent is running but MSFS is not (or SimConnect could not attach).
-- **`Worker rejected AGENT_TOKEN` in agent.log**: `agent\.env` token differs from the `AGENT_TOKEN` secret.
 - **`wrangler deploy` complains about the assets directory**: the config points at `../frontend`. If your wrangler version refuses a directory outside `worker/`, move `wrangler.jsonc` to the repository root and change `main`, `assets.directory` and `migrations_dir` to `worker/src/index.ts`, `frontend` and `worker/migrations`.
 
 ## Security notes

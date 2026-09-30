@@ -52,8 +52,8 @@ export async function getStatus(env: Env): Promise<Response> {
     }
   }
 
-  // Keep the banner's elapsed time ticking between heartbeats.
-  if (row.state === "AIRBORNE" && currentFlight && typeof currentFlight.elapsed_seconds === "number") {
+  // Keep the banner's elapsed time ticking between heartbeats (the agent stops the clock while paused).
+  if (row.state === "AIRBORNE" && row.paused !== 1 && currentFlight && typeof currentFlight.elapsed_seconds === "number") {
     currentFlight.elapsed_seconds += Math.floor(ageSec);
   }
 

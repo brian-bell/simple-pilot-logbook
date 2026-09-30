@@ -24,7 +24,7 @@ What the script does:
 - removes an older registration of `SimplePilotLogbook` that points somewhere else (the previous Python/pywin32 service)
 - downloads `WinSW-x64.exe` 2.12.0 into `agent\service\SimplePilotLogbook.exe` on first install and verifies its SHA-256
 - renders `agent\service\SimplePilotLogbook.xml` from the committed `.xml.template` (Node path, agent folder, automatic start, restart on failure, rolling logs)
-- registers the service (or refreshes it on update) and starts it
+- registers the service on first install, or stops the running one on update so WinSW reads the new configuration, then starts it
 
 After install, open the logbook URL printed at the end (your `WORKER_URL`) and enter the viewer token.
 
@@ -55,7 +55,7 @@ What the script does:
 - `Missing required setting(s)` in `SimplePilotLogbook.err.log`: `agent\.env` is incomplete. The service restarts every 10 seconds until it is fixed.
 - `Worker rejected AGENT_TOKEN` in `agent.log`: the token in `agent\.env` does not match the Worker secret (`npx wrangler secret put AGENT_TOKEN`)
 - `Delivery failed ... retrying` in `agent.log`: the Worker is unreachable; events stay in `agent\outbox.db` and are sent when it comes back
-- `MSFS not reachable` in `agent.log`: MSFS is not running, or its SimConnect pipe/port is not reachable from the service account. See the SimConnect notes in the README.
+- `MSFS not reachable` in `agent.log`: MSFS is not running, or its SimConnect pipe/port is not reachable from the service account. See [SimConnect connection](architecture.md#simconnect-connection).
 - Restart manually (as Administrator):
 
 ```powershell

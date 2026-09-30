@@ -9,6 +9,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - Architecture: a Node.js/TypeScript **agent** (Windows service via WinSW) sends events over HTTPS to a **Cloudflare Worker**; the Worker stores them in **D1** and serves the vanilla frontend as static assets
 - Primary platform: Windows 10/11 for the agent (live SimConnect); the Worker is platform-neutral TypeScript
 - Target sim: MSFS 2024 (SU6+). MSFS 2020 only best-effort through the KittyHawk protocol fallback
+- How it works (API, event contract, status, flight detection): `docs/architecture.md`
 
 ## Key Files
 - `agent/src/main.ts`: agent entry point; starts the SimConnect worker + `Sender`, sends a heartbeat every 10 s, graceful shutdown on SIGINT/SIGTERM/SIGBREAK
@@ -21,19 +22,20 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `agent/src/config.ts`: reads `agent/.env` (`WORKER_URL`, `AGENT_TOKEN`, optional cadences and SimConnect endpoint)
 - `agent/src/airports.ts`: nearest-airport lookup and haversine helpers (bundled `agent/data/airports.json`)
 - `agent/src/log.ts`: rotating `agent/agent.log` (1 MB x 3)
-- `agent/service/SimplePilotLogbook.xml.template`, `install_service.ps1`, `uninstall_service.ps1`: WinSW service tooling (WinSW 2.12.0, SHA-256 pinned in the installer)
-- `worker/wrangler.jsonc`: Worker config (D1 binding `DB`, assets from `../frontend`, `run_worker_first: ["/api/*"]`)
+- `agent/service/SimplePilotLogbook.xml.template` plus `install_service.ps1` and `uninstall_service.ps1` at the repo root: WinSW service tooling (WinSW 2.12.0, SHA-256 pinned in the installer)
+- `worker/wrangler.jsonc`: Worker config (D1 binding `DB`, R2 binding `BACKUPS`, nightly cron, assets from `../frontend`, `run_worker_first: ["/api/*"]`)
 - `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`)
-- `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `export.ts` (CSV export), `backup.ts` (nightly D1 -> R2 backup, `scheduled` handler), `status.ts`, `db.ts`
+- `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `export.ts` (CSV export), `backup.ts` (nightly D1 -> R2 backup, `scheduled` handler), `status.ts`, `db.ts`, `types.ts` (env, event types, JSON helpers)
+- `worker/.dev.vars.example`: local dev tokens (`dev-agent` / `dev-viewer`)
 - `frontend/index.html`, `frontend/style.css`, `frontend/app.js`: vanilla frontend
-- `docs/cloud-deploy.md`, `docs/service-install.md`: deploy, local dev, service install/remove
+- `docs/architecture.md`, `docs/cloud-deploy.md`, `docs/service-install.md`: how it works; deploy and local dev; service install/remove
 - `start.bat`: local agent launcher (npm ci on first run, build, run)
+- `.claude/launch.json`: `worker-dev` preview config (Windows `cmd`, `wrangler dev` on port 8787)
 
 ## Working Rules
 - Keep changes minimal and scoped to the request.
-- Preserve API response shapes unless the task explicitly requires API changes.
 - If Worker API behavior changes, update `frontend/app.js` in the same task.
-- If the event contract changes, update `agent/src/events.ts` and `worker/src/events.ts` together.
+- If the event contract changes, update `agent/src/events.ts`, `worker/src/events.ts` and `worker/src/types.ts` together, and the contract in `docs/architecture.md`.
 - Do not add frameworks, build tooling, or major abstractions unless explicitly requested (no Hono/Express in the Worker, no JS framework in the frontend; in the agent, `node-simconnect` is the only runtime dependency and HTTP is the global `fetch`).
 - Prefer small readable functions over broad refactors.
 
@@ -44,7 +46,8 @@ Use this file for repository-specific rules that help coding agents make safe ch
   - public states `DISCONNECTED -> ON_GROUND -> AIRBORNE` (heartbeat and `/api/status` shape unchanged)
   - only `live` samples change state; `out` = MSFS 2024 placeholder position (lat 0 / lon 0 or 90E) or implausible altitude; `hold` = menu/loading camera, replay, slew, missing values
   - the `Sim` system event is logged only, never used for gating (MSFS 2024 does not send SimStop on return to the main menu)
-  - flights shorter than 30 seconds are ignored, whatever the ending
+  - flight time (`elapsed_seconds`) excludes time paused (Pause_EX1) between takeoff and the end
+  - flights shorter than 30 seconds of flight time are ignored, whatever the ending
   - landing VS from `PLANE TOUCHDOWN NORMAL VELOCITY` at first contact, falling back to the trailing 6 s vertical-speed window; landing G is the per-frame peak up to 3 s after touchdown; bounces within 15 s merge
   - flights without a touchdown are recorded with notes `Crashed` or `Ended without landing`; agent started mid-air adds `Started in the air`
 - Treat SimConnect as optional: the agent must start and heartbeat when MSFS is closed, and must not spam the log while waiting (one line, then every 5 minutes).
@@ -58,7 +61,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - Every `/api/*` route requires a bearer token: `AGENT_TOKEN` only for `POST /api/events`, `VIEWER_TOKEN` for everything else. No cross-acceptance; an unset secret must fail closed.
 - Ingest is idempotent on event `id`. Keep the statement order in `events.ts`: guarded flight insert **before** the event insert, all inside one `env.DB.batch()`.
 - Max 20 events per request (D1 free plan allows 50 queries per invocation).
-- `GET /api/status`, `GET /api/flights`, `GET /api/flights/{id}`, `DELETE /api/flights/{id}` keep their current response shapes; adding fields is fine, renaming or removing is not.
+- Unless the task explicitly requires an API change, `GET /api/status`, `GET /api/flights`, `GET /api/flights/{id}` and `DELETE /api/flights/{id}` keep their current response shapes; adding fields is fine, renaming or removing is not.
 - Static assets are served by Cloudflare with `run_worker_first: ["/api/*"]`; keep the `env.ASSETS.fetch` fallthrough in `index.ts`.
 - Schema changes go through new files in `worker/migrations/`; never edit an applied migration.
 
@@ -71,7 +74,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 
 ## Data And Compatibility
 - Source of truth: D1 (`flights` table, same 17 columns as the old SQLite schema plus `event_id`).
-- Local agent state: `agent/outbox.db` (gitignored). The old `backend/logbook.db` importer was retired; it is in git history at commit `84af342`.
+- Local agent state: `agent/outbox.db` (gitignored). There is no `backend/` anymore; the retired `backend/logbook.db` importer is in git history at commit `84af342`.
 - `date` values are ISO-style strings.
 - Avoid schema changes unless requested.
 
