@@ -1,16 +1,16 @@
 /**
- * App component: owns the live status, the logbook (flights, total, sort,
- * selected flight) and renders the header, banner, table and detail modal.
- * Sign-in and CSV export still live in main.js (Preact migration, PR 3 of 4);
- * main.js passes signedIn and the sign-out/401/export callbacks in.
+ * App component: owns all state (signed-in flag, live status, the logbook:
+ * flights, total, sort, selected flight) and renders the header, banner,
+ * table, detail modal and sign-in overlay.
+ * Any 401 signs out, which shows the sign-in overlay and stops both polls.
  */
 
 import { useState, useEffect, useMemo, useCallback } from "preact/hooks";
 import { html } from "./html.js";
-import { apiFetch, UnauthorizedError } from "./api.js";
+import { apiFetch, UnauthorizedError, getToken, setToken, clearToken } from "./api.js";
 import { usePolling } from "./hooks.js";
 import { sortFlights } from "./sort.js";
-import { Header, ActiveBanner, Toolbar, FlightTable, FlightModal } from "./components.js";
+import { Header, ActiveBanner, Toolbar, FlightTable, FlightModal, SignIn } from "./components.js";
 
 const STATUS_INTERVAL = 3_000;   // ms between status polls
 const FLIGHTS_INTERVAL = 10_000; // ms between logbook refreshes
@@ -19,7 +19,9 @@ const OFFLINE_STATUS = { connected: false, state: "DISCONNECTED", current_flight
 const EMPTY_LOGBOOK = { flights: [], total: 0 };
 const TOKEN_REJECTED = "Token rejected. Enter a valid viewer token.";
 
-export function App({ signedIn, onSignOut, onUnauthorized, onExport }) {
+export function App() {
+  const [signedIn, setSignedIn] = useState(() => getToken() !== "");
+  const [authMessage, setAuthMessage] = useState("");
   const [status, setStatus] = useState(null);
   const [logbook, setLogbook] = useState(EMPTY_LOGBOOK);
   const [sort, setSort] = useState({ col: "date", dir: "desc" });
@@ -34,6 +36,33 @@ export function App({ signedIn, onSignOut, onUnauthorized, onExport }) {
     setLogbook(EMPTY_LOGBOOK);
     setSelected(null);
   }, [signedIn]);
+
+  /** Show the sign-in overlay; signing out stops both polls. */
+  const onUnauthorized = useCallback(message => {
+    setAuthMessage(message || "");
+    setSignedIn(false);
+  }, []);
+
+  const onSignOut = useCallback(() => {
+    clearToken();
+    onUnauthorized("");
+  }, [onUnauthorized]);
+
+  /** Save a token and verify it against /api/status; true when accepted. */
+  const onSignIn = useCallback(async token => {
+    setAuthMessage("");
+    setToken(token);
+    try {
+      const res = await apiFetch("/api/status");
+      if (!res.ok) throw new Error(res.status);
+    } catch (err) {
+      clearToken();
+      setAuthMessage(err instanceof UnauthorizedError ? "Invalid token." : "Could not reach the server.");
+      return false;
+    }
+    setSignedIn(true);
+    return true;
+  }, []);
 
   async function pollStatus() {
     try {
@@ -105,9 +134,10 @@ export function App({ signedIn, onSignOut, onUnauthorized, onExport }) {
     <${Header} signedIn=${signedIn} status=${status} onSignOut=${onSignOut} />
     <${ActiveBanner} status=${signedIn ? status : null} />
     <main class="main-content">
-      <${Toolbar} total=${logbook.total} onExport=${onExport} />
+      <${Toolbar} total=${logbook.total} onUnauthorized=${onUnauthorized} />
       ${table}
     </main>
     ${selected && html`<${FlightModal} flight=${selected} onClose=${closeModal} />`}
+    ${!signedIn && html`<${SignIn} message=${authMessage} onSignIn=${onSignIn} />`}
   `;
 }

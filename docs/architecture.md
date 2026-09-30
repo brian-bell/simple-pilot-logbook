@@ -17,7 +17,7 @@ How the agent, the Worker and the frontend fit together: the event contract, the
 |---|---|
 | `agent/` | Node.js/TypeScript agent for the sim PC; `service/` holds the WinSW template, `data/airports.json` the bundled airport list (~29k airports, mwgg/Airports open data) |
 | `worker/` | Cloudflare Worker (TypeScript), `wrangler.jsonc`, D1 migrations |
-| `frontend/` | Vanilla HTML/CSS/JS, served by Cloudflare as static assets |
+| `frontend/` | Preact + htm (vendored ES modules, no build step), served by Cloudflare as static assets |
 | `docs/` | Deploy, service and architecture guides |
 | `start.bat`, `install_service.ps1`, `uninstall_service.ps1` | Windows launcher and service scripts |
 
