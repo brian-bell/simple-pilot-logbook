@@ -79,7 +79,7 @@ The agent token is accepted only for `POST /api/events` and the viewer token onl
 | `flight.takeoff` | at liftoff; its `id` is the `flight_uuid` shared by later events | `events` |
 | `flight.position` | every 10 s while airborne (lat/lon/alt/vs/ground speed in knots) | `events` |
 | `flight.landing` | when the flight ends | `events` + one `flights` row |
-| `flight.import` | not sent; manual back-fill with the landing payload | `events` + one `flights` row |
+| `flight.import` | not sent by the running agent; one-off back-fills (the Volanta importer) with the landing payload | `events` + one `flights` row |
 
 Every event is idempotent on its `id`, so retries never duplicate a flight. A request is validated and written atomically; an invalid event returns `400 {"error": "...", "index": n}`. On success the response is `{"accepted": n, "inserted_flights": m}`.
 
@@ -126,3 +126,21 @@ The agent tries node-simconnect's auto-detection first (`SimConnect.cfg`, the na
 - **Agent outbox** (`agent/outbox.db`, `node:sqlite`): pending events with retry and dead-letter bookkeeping. Roughly hourly, undelivered `flight.position` rows older than 7 days and all but the newest 1,000 dead-lettered rows are pruned; landings are never pruned.
 
 The one-off importer for the pre-Cloudflare `backend/logbook.db` was retired with the Python agent; it is in git history at commit `84af342`.
+
+## Volanta import
+
+`agent/src/import_volanta.ts` back-fills flight history from a Volanta data export (unzip it first). It maps each completed flight to a `flight.import` event with the id `volanta:<Volanta key>`, so re-runs insert nothing and deleted flights stay deleted. Track points are not imported.
+
+```
+cd agent && npm run build
+npm run import:volanta -- <export dir> [--csv preview.csv]   # dry run, nothing sent
+npm run import:volanta -- <export dir> --send                # uses WORKER_URL / AGENT_TOKEN
+```
+
+- Skipped: flights not `Completed`, never airborne, or under 30 s of flight time.
+- `date` is the first airborne position; `elapsed_seconds` is Volanta's airborne time (pauses excluded); `max_altitude_ft` ignores MSFS placeholder positions; landing VS is the first touchdown and landing G the peak within 15 s of it.
+- No Volanta arrival: a flight that ended in the air gets `Ended without landing` and no arrival; one that ended on the ground gets its stop position and the nearest airport within 10 nm.
+- `aircraft_type` comes from Volanta's aircraft code when it is an ICAO designator, else from `aircraft.export` by registration.
+- Callsign, route, block time and the Volanta key are kept in the event payload only.
+- With `VIEWER_TOKEN` set, `--send` first refuses any flight within 10 minutes of an existing non-Volanta flight (`--allow-overlap` overrides).
+- Undo: `DELETE FROM flights WHERE event_id LIKE 'volanta:%'`.
