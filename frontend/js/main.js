@@ -8,7 +8,9 @@
  * All DOM manipulation is vanilla JS — no build step, no dependencies.
  */
 
-"use strict";
+import { UnauthorizedError, getToken, setToken, clearToken, apiFetch } from "./api.js";
+import { fmtDuration, fmtVS, fmtG, fmtNm, fmtAlt, fmtDate, routeLabel } from "./format.js";
+import { sortFlights } from "./sort.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,38 +30,8 @@ let _statusTimer = null;
 let _flightsTimer = null;
 
 // ---------------------------------------------------------------------------
-// Auth – viewer token stored in localStorage, sent as a bearer token
+// Auth – sign-in overlay and polling (token storage lives in api.js)
 // ---------------------------------------------------------------------------
-
-const TOKEN_KEY = "spl_viewer_token";
-
-class UnauthorizedError extends Error {}
-
-function getToken() {
-  try { return localStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
-}
-function setToken(token) {
-  try { localStorage.setItem(TOKEN_KEY, token); } catch { /* storage unavailable */ }
-}
-function clearToken() {
-  try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
-}
-
-/**
- * fetch() wrapper that adds the Authorization header.
- * Throws UnauthorizedError when no token is saved or the server answers 401.
- * @param {string} path
- * @param {RequestInit} [init]
- */
-async function apiFetch(path, init = {}) {
-  const token = getToken();
-  if (!token) throw new UnauthorizedError("no token");
-  const headers = new Headers(init.headers || {});
-  headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(path, { ...init, headers });
-  if (res.status === 401) throw new UnauthorizedError("rejected");
-  return res;
-}
 
 /** Show the sign-in overlay, stop polling, and reset the status indicator. */
 function showAuth(message) {
@@ -115,108 +87,6 @@ function stopPolling() {
   if (_flightsTimer !== null) { clearInterval(_flightsTimer); _flightsTimer = null; }
 }
 
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-
-/**
- * Format elapsed seconds as "2h 34m" or "45m 12s".
- * @param {number|null} secs
- */
-function fmtDuration(secs) {
-  if (secs == null) return "—";
-  secs = Math.round(secs);
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
-  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
-  return `${s}s`;
-}
-
-/**
- * Format a vertical speed in fpm with a landing quality CSS class.
- * @param {number|null} fpm
- * @returns {{ text: string, cls: string }}
- */
-function fmtVS(fpm) {
-  if (fpm == null) return { text: "—", cls: "" };
-  const abs = Math.abs(fpm);
-  const text = `${Math.round(fpm)} fpm`;
-  let cls = "";
-  if (abs <= 200)       cls = "vs-smooth";
-  else if (abs <= 400)  cls = "vs-firm";
-  else                  cls = "vs-hard";
-  return { text, cls };
-}
-
-/**
- * Format a G-force value.
- * @param {number|null} g
- */
-function fmtG(g) {
-  if (g == null) return "—";
-  return g.toFixed(2) + " G";
-}
-
-/**
- * Format a distance in nautical miles.
- * @param {number|null} nm
- */
-function fmtNm(nm) {
-  if (nm == null) return "—";
-  return nm.toFixed(1);
-}
-
-/**
- * Format altitude in feet.
- * @param {number|null} ft
- */
-function fmtAlt(ft) {
-  if (ft == null) return "—";
-  return Math.round(ft).toLocaleString() + " ft";
-}
-
-/**
- * Parse an ISO 8601 date string and return { date, time } display strings.
- * @param {string|null} iso
- */
-function fmtDate(iso) {
-  if (!iso) return { date: "—", time: "" };
-  const d = new Date(iso);
-  if (isNaN(d)) return { date: iso.slice(0, 10), time: "" };
-  return {
-    date: d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }),
-    time: d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
-  };
-}
-
-/**
- * Build a safe text node from a potentially unsafe string.
- * @param {string|null|undefined} s
- * @param {string} fallback
- */
-function safe(s, fallback = "—") {
-  return (s != null && s !== "") ? String(s) : fallback;
-}
-
-/**
- * Return ICAO or a shortened coordinate string.
- * @param {object} flight
- * @param {"departure"|"arrival"} which
- */
-function routeLabel(flight, which) {
-  const icao = flight[`${which}_icao`];
-  const lat  = flight[`${which}_lat`];
-  const lon  = flight[`${which}_lon`];
-  if (icao) return icao;
-  if (lat != null && lon != null) {
-    const ns = lat >= 0 ? "N" : "S";
-    const ew = lon >= 0 ? "E" : "W";
-    return `${ns}${Math.abs(lat).toFixed(1)} ${ew}${Math.abs(lon).toFixed(1)}`;
-  }
-  return "—";
-}
 
 // ---------------------------------------------------------------------------
 // Status polling
@@ -308,35 +178,6 @@ async function loadFlights() {
   }
 }
 
-function sortedFlights() {
-  const col = _sortCol;
-  const dir = _sortDir === "asc" ? 1 : -1;
-
-  return [..._flights].sort((a, b) => {
-    let va, vb;
-    switch (col) {
-      case "date":        va = a.date || ""; vb = b.date || ""; break;
-      case "aircraft":    va = aircraftSortKey(a); vb = aircraftSortKey(b); break;
-      case "from":        va = a.departure_icao || ""; vb = b.departure_icao || ""; break;
-      case "to":          va = a.arrival_icao || ""; vb = b.arrival_icao || ""; break;
-      case "distance_nm": va = a.distance_nm ?? -Infinity; vb = b.distance_nm ?? -Infinity; break;
-      case "elapsed":     va = a.elapsed_seconds ?? -Infinity; vb = b.elapsed_seconds ?? -Infinity; break;
-      case "max_alt":     va = a.max_altitude_ft ?? -Infinity; vb = b.max_altitude_ft ?? -Infinity; break;
-      case "landing_vs":  va = a.landing_vs_fpm ?? Infinity; vb = b.landing_vs_fpm ?? Infinity; break;
-      case "landing_g":   va = a.landing_g_force ?? -Infinity; vb = b.landing_g_force ?? -Infinity; break;
-      default:            va = ""; vb = "";
-    }
-    if (va < vb) return -dir;
-    if (va > vb) return dir;
-    return 0;
-  });
-}
-
-/** Sort by ICAO type first, so all C172s group together; older flights without one fall back as before. */
-function aircraftSortKey(f) {
-  return [f.aircraft_type, f.aircraft_registration || f.aircraft_title].filter(Boolean).join(" ");
-}
-
 function renderTable() {
   const tbody    = document.getElementById("flight-rows");
   const emptyEl  = document.getElementById("empty-state");
@@ -350,7 +191,7 @@ function renderTable() {
     }
   });
 
-  const rows = sortedFlights();
+  const rows = sortFlights(_flights, _sortCol, _sortDir);
 
   if (rows.length === 0) {
     tableEl.classList.add("hidden");
