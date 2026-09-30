@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 
-/** The 17 logbook columns, same order as the Worker's FLIGHT_FIELDS. */
+/** The 18 logbook columns, same order as the Worker's FLIGHT_FIELDS. */
 export const FLIGHT_FIELDS = [
   "date",
   "aircraft_title",
@@ -28,6 +28,7 @@ export const FLIGHT_FIELDS = [
   "landing_vs_fpm",
   "landing_g_force",
   "notes",
+  "aircraft_type",
 ] as const;
 
 export type FlightField = (typeof FLIGHT_FIELDS)[number];
@@ -60,6 +61,7 @@ export interface CurrentFlight {
   departure_lon: number | null;
   aircraft_title: string | null;
   aircraft_registration: string | null;
+  aircraft_type: string | null;
   elapsed_seconds: number;
   altitude_ft: number | null;
 }
@@ -89,6 +91,19 @@ export function cleanSimString(value: unknown): string | null {
   return text || null;
 }
 
+/**
+ * Short ICAO type designator (C172, A20N, B738) from the ATC MODEL SimVar, or null.
+ * MSFS often returns a localisation key instead of the bare code, e.g.
+ * "TT:ATCCOM.AC_MODEL_C172.0.text", "TT:ATCCOM.AC_MODEL C172.0.text" or "$$:A320".
+ */
+export function icaoTypeFromAtcModel(value: unknown): string | null {
+  const text = cleanSimString(value);
+  if (!text) return null;
+  const key = /AC_MODEL[_ ]([A-Za-z0-9]+)\.\d+\.text$/i.exec(text);
+  const code = (key ? key[1] : text.replace(/^(TT|\$\$):/, "")).trim().toUpperCase();
+  return /^[A-Z][A-Z0-9]{1,3}$/.test(code) ? code : null;
+}
+
 // ---------------------------------------------------------------------------
 // Builders
 // ---------------------------------------------------------------------------
@@ -113,6 +128,7 @@ export interface TakeoffInfo {
   departure_lon: number | null;
   aircraft_title: string | null;
   aircraft_registration: string | null;
+  aircraft_type: string | null;
   livery: string | null;
   altitude_ft: number | null;
   started_in_air: boolean;
@@ -144,7 +160,7 @@ export function positionEvent(
   });
 }
 
-/** `record` is the 17-field logbook row; `extra` carries flight_uuid and diagnostics. */
+/** `record` is the 18-field logbook row; `extra` carries flight_uuid and diagnostics. */
 export function landingEvent(record: FlightRecord, extra: Record<string, unknown>): AgentEvent {
   return makeEvent("flight.landing", { ...record, ...extra });
 }

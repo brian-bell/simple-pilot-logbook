@@ -73,7 +73,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - Maintain usable desktop and mobile layouts.
 
 ## Data And Compatibility
-- Source of truth: D1 (`flights` table, same 17 columns as the old SQLite schema plus `event_id`).
+- Source of truth: D1 (`flights` table, the old SQLite schema's 17 columns plus `event_id` and `aircraft_type`).
 - Local agent state: `agent/outbox.db` (gitignored). There is no `backend/` anymore; the retired `backend/logbook.db` importer is in git history at commit `84af342`.
 - `date` values are ISO-style strings.
 - Avoid schema changes unless requested.

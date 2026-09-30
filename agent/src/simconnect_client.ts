@@ -71,6 +71,8 @@ export interface FrameSample {
 export interface AircraftUpdate {
   title?: string | null;
   atcId?: string | null;
+  /** Raw ATC MODEL: an ICAO type designator or a localisation key that contains one. */
+  atcModel?: string | null;
   livery?: string | null;
 }
 
@@ -182,6 +184,7 @@ const DEFINITIONS: DefinitionSpec[] = [
     fields: [
       { key: "title", name: "TITLE", units: null, kind: "s256" },
       { key: "atcId", name: "ATC ID", units: null, kind: "s64" },
+      { key: "atcModel", name: "ATC MODEL", units: null, kind: "s64" },
     ],
   },
   {
@@ -676,7 +679,7 @@ export class SimConnectClient {
         );
         break;
       case DefId.AIRCRAFT:
-        this.safe(() => this.handlers.aircraft({ title: str(v.title), atcId: str(v.atcId) }));
+        this.safe(() => this.handlers.aircraft({ title: str(v.title), atcId: str(v.atcId), atcModel: str(v.atcModel) }));
         break;
       case DefId.LIVERY:
         this.safe(() => this.handlers.aircraft({ livery: str(v.livery) }));

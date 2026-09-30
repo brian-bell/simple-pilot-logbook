@@ -36,6 +36,7 @@ import { performance } from "node:perf_hooks";
 import { findNearestAirport, haversineNm, type NearestAirport } from "./airports.js";
 import {
   finiteNum,
+  icaoTypeFromAtcModel,
   landingEvent,
   positionEvent,
   takeoffEvent,
@@ -149,6 +150,7 @@ interface Flight {
   departureLon: number;
   aircraftTitle: string | null;
   aircraftRegistration: string | null;
+  aircraftType: string | null;
   livery: string | null;
   maxAltFt: number;
   notes: string[];
@@ -174,9 +176,10 @@ export class FlightDetector {
   private flight: Flight | null = null;
   private sim: SimInfo | null = null;
   private simRunning: boolean | null = null;
-  private aircraft: { title: string | null; atcId: string | null; livery: string | null } = {
+  private aircraft: { title: string | null; atcId: string | null; icaoType: string | null; livery: string | null } = {
     title: null,
     atcId: null,
+    icaoType: null,
     livery: null,
   };
   private vsWindow: Array<{ mono: number; vs: number }> = [];
@@ -235,14 +238,17 @@ export class FlightDetector {
     const before = { ...this.aircraft };
     if (update.title !== undefined) this.aircraft.title = update.title;
     if (update.atcId !== undefined) this.aircraft.atcId = update.atcId;
+    if (update.atcModel !== undefined) this.aircraft.icaoType = icaoTypeFromAtcModel(update.atcModel);
     if (update.livery !== undefined) this.aircraft.livery = update.livery;
     if (
       before.title !== this.aircraft.title ||
       before.atcId !== this.aircraft.atcId ||
+      before.icaoType !== this.aircraft.icaoType ||
       before.livery !== this.aircraft.livery
     ) {
       this.opts.log.info(
-        `Aircraft: ${this.aircraft.title ?? "?"} | ATC ID ${this.aircraft.atcId ?? "?"} | livery ${this.aircraft.livery ?? "?"}`,
+        `Aircraft: ${this.aircraft.title ?? "?"} | ATC ID ${this.aircraft.atcId ?? "?"} | ` +
+          `type ${this.aircraft.icaoType ?? "?"}${update.atcModel !== undefined ? ` (ATC MODEL ${update.atcModel ?? "?"})` : ""} | livery ${this.aircraft.livery ?? "?"}`,
       );
     }
   }
@@ -363,6 +369,7 @@ export class FlightDetector {
       departure_lon: f.departureLon,
       aircraft_title: f.aircraftTitle,
       aircraft_registration: f.aircraftRegistration,
+      aircraft_type: f.aircraftType,
       elapsed_seconds: flightSeconds(f, this.clock.wall()),
       altitude_ft: finiteNum(f.lastLive.altitudeFt, 0),
     };
@@ -483,6 +490,7 @@ export class FlightDetector {
       departureLon: s.lon,
       aircraftTitle: this.aircraft.title,
       aircraftRegistration: this.aircraft.atcId,
+      aircraftType: this.aircraft.icaoType,
       livery: this.aircraft.livery,
       maxAltFt: s.altitudeFt ?? 0,
       notes: startedInAir ? [NOTE_STARTED_IN_AIR] : [],
@@ -510,6 +518,7 @@ export class FlightDetector {
         departure_lon: s.lon,
         aircraft_title: flight.aircraftTitle,
         aircraft_registration: flight.aircraftRegistration,
+        aircraft_type: flight.aircraftType,
         livery: flight.livery,
         altitude_ft: finiteNum(s.altitudeFt),
         started_in_air: startedInAir,
@@ -525,6 +534,7 @@ export class FlightDetector {
     if (s.altitudeFt !== null) f.maxAltFt = Math.max(f.maxAltFt, s.altitudeFt);
     f.aircraftTitle ??= this.aircraft.title;
     f.aircraftRegistration ??= this.aircraft.atcId;
+    f.aircraftType ??= this.aircraft.icaoType;
     f.livery ??= this.aircraft.livery;
 
     if (f.touchdown && s.mono - f.touchdown.lastContactMono > TOUCHDOWN_SETTLE_MS) {
@@ -665,6 +675,7 @@ export class FlightDetector {
       landing_vs_fpm: finiteNum(vsFpm, 1),
       landing_g_force: finiteNum(gForce, 2),
       notes: notes.length ? notes.join("; ") : null,
+      aircraft_type: f.aircraftType ?? this.aircraft.icaoType,
     };
 
     this.opts.emit(

@@ -7,7 +7,7 @@
 
 import type { IngestEvent } from "./types";
 
-/** The 17 logbook columns, in the same order as the old backend/database.py. */
+/** The logbook columns: the old backend/database.py's 17 in their order, then later additions. */
 export const FLIGHT_FIELDS = [
   "date",
   "aircraft_title",
@@ -26,6 +26,7 @@ export const FLIGHT_FIELDS = [
   "landing_vs_fpm",
   "landing_g_force",
   "notes",
+  "aircraft_type",
 ] as const;
 
 export type FlightField = (typeof FLIGHT_FIELDS)[number];
@@ -40,10 +41,13 @@ const STRING_FIELDS: ReadonlySet<string> = new Set([
   "arrival_icao",
   "arrival_name",
   "notes",
+  "aircraft_type",
 ]);
 const INT_FIELDS: ReadonlySet<string> = new Set(["elapsed_seconds"]);
 const MAX_STRING = 200;
 const MAX_NOTES = 2000;
+/** ICAO type designators are at most four characters; allow a little slack. */
+const MAX_TYPE = 8;
 
 function asString(raw: unknown, max: number): string | null {
   if (raw == null) return null;
@@ -71,7 +75,7 @@ export function normaliseFlight(payload: Record<string, unknown>): FlightInput |
   for (const field of FLIGHT_FIELDS) {
     const raw = payload[field];
     if (STRING_FIELDS.has(field)) {
-      out[field] = asString(raw, field === "notes" ? MAX_NOTES : MAX_STRING);
+      out[field] = asString(raw, field === "notes" ? MAX_NOTES : field === "aircraft_type" ? MAX_TYPE : MAX_STRING);
     } else {
       out[field] = asNumber(raw, INT_FIELDS.has(field));
     }

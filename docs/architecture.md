@@ -58,6 +58,7 @@ The agent token is accepted only for `POST /api/events` and the viewer token onl
         "date": "2026-09-25T19:40:11+00:00",
         "aircraft_title": "Cessna 172 Skyhawk",
         "aircraft_registration": "N12345",
+        "aircraft_type": "C172",
         "departure_icao": "KSFO",
         "arrival_icao": "KOAK",
         "distance_nm": 11.2,
@@ -86,7 +87,7 @@ Every event is idempotent on its `id`, so retries never duplicate a flight. A re
 
 ```json
 { "connected": true, "state": "AIRBORNE", "on_ground": false, "paused": false,
-  "current_flight": { "departure_icao": "KSFO", "aircraft_title": "…", "elapsed_seconds": 420, "altitude_ft": 2500, "…": "…" },
+  "current_flight": { "departure_icao": "KSFO", "aircraft_title": "…", "aircraft_type": "C172", "elapsed_seconds": 420, "altitude_ft": 2500, "…": "…" },
   "agent_seen_at": "2026-09-25T20:15:02Z" }
 ```
 
@@ -121,7 +122,7 @@ The agent tries node-simconnect's auto-detection first (`SimConnect.cfg`, the na
 
 ## Storage
 
-- **D1** (`worker/migrations/`): `events` (append-only log of everything except heartbeats), `flights` (the logbook: 17 flight columns plus `event_id` and `created_at`), `agent_status` (one row, overwritten by heartbeats).
+- **D1** (`worker/migrations/`): `events` (append-only log of everything except heartbeats), `flights` (the logbook: the 17 original flight columns plus `aircraft_type`, `event_id` and `created_at`), `agent_status` (one row, overwritten by heartbeats).
 - **Agent outbox** (`agent/outbox.db`, `node:sqlite`): pending events with retry and dead-letter bookkeeping. Roughly hourly, undelivered `flight.position` rows older than 7 days and all but the newest 1,000 dead-lettered rows are pruned; landings are never pruned.
 
 The one-off importer for the pre-Cloudflare `backend/logbook.db` was retired with the Python agent; it is in git history at commit `84af342`.
