@@ -27,6 +27,8 @@
  *   ended     90 s of `out` samples, a teleport (Travel To / restart / slew far
  *             away), the sim disconnecting, or the agent stopping
  * Flights shorter than 30 s are discarded whatever the end reason.
+ *
+ * Flight time excludes time spent paused (Pause_EX1) between takeoff and the end.
  */
 
 import { randomUUID } from "node:crypto";
@@ -155,6 +157,8 @@ interface Flight {
   touchdownBaselineFps: number | null;
   touchdown: Touchdown | null;
   lastPositionMono: number;
+  /** Wall-clock pause intervals during the flight; `end` is null while the pause is still open. */
+  pauses: Array<{ start: number; end: number | null }>;
 }
 
 export interface DetectorOptions {
@@ -253,6 +257,7 @@ export class FlightDetector {
           event.flags !== 0 &&
           this.outSinceMono === null &&
           (this.pausedInFlight || this.flight !== null || this.liveOnGround());
+        if (this.flight) notePause(this.flight, event.flags !== 0, this.clock.wall());
         break;
       case "crashed":
         log.warn("Sim reported a crash.");
@@ -353,7 +358,7 @@ export class FlightDetector {
       departure_lon: f.departureLon,
       aircraft_title: f.aircraftTitle,
       aircraft_registration: f.aircraftRegistration,
-      elapsed_seconds: Math.max(0, Math.trunc((this.clock.wall() - f.takeoffWall) / 1000)),
+      elapsed_seconds: flightSeconds(f, this.clock.wall()),
       altitude_ft: finiteNum(f.lastLive.altitudeFt, 0),
     };
     return { connected: true, state: "AIRBORNE", on_ground: false, paused: this.pausedInFlight, current_flight: current };
@@ -480,6 +485,7 @@ export class FlightDetector {
       touchdownBaselineFps: s.touchdownNormalFps,
       touchdown: null,
       lastPositionMono: s.mono, // first position event follows one interval after takeoff
+      pauses: [],
     };
     this.flight = flight;
     this.phase = "AIRBORNE";
@@ -525,7 +531,7 @@ export class FlightDetector {
     if (s.mono - f.lastPositionMono >= this.positionMs) {
       f.lastPositionMono = s.mono;
       this.opts.emit(
-        positionEvent(f.uuid, s.lat, s.lon, s.altitudeFt, s.vsFpm, s.groundSpeedKt, (s.wall - f.takeoffWall) / 1000),
+        positionEvent(f.uuid, s.lat, s.lon, s.altitudeFt, s.vsFpm, s.groundSpeedKt, flightSeconds(f, s.wall)),
       );
     }
   }
@@ -600,7 +606,9 @@ export class FlightDetector {
     const landed = reason === "landed" && td !== null;
 
     const endWall = landed ? td.wall : f.lastLive.wall;
-    const elapsed = Math.max(0, Math.trunc((endWall - f.takeoffWall) / 1000));
+    const elapsed = flightSeconds(f, endWall);
+    const pausedS = Math.round(pausedMs(f, endWall) / 1000);
+    if (pausedS > 0) this.opts.log.info(`Excluding ${pausedS} s paused from the flight time.`);
     if (elapsed < MIN_FLIGHT_SECONDS) {
       this.opts.log.info(`Flight too short (${elapsed} s, ${reason}); discarding.`);
       return;
@@ -682,6 +690,29 @@ export class FlightDetector {
   private simDescription(): string | null {
     return this.sim ? `${this.sim.label} ${this.sim.version}` : null;
   }
+}
+
+/** Opens a pause interval on pause, closes the open one on unpause (flag changes while paused are ignored). */
+function notePause(f: Flight, paused: boolean, wall: number): void {
+  const open = f.pauses.at(-1)?.end === null ? f.pauses.at(-1) : undefined;
+  if (paused && !open) f.pauses.push({ start: wall, end: null });
+  else if (!paused && open) open.end = wall;
+}
+
+/** Paused time between takeoff and `untilWall`; an open pause counts up to `untilWall`. */
+function pausedMs(f: Flight, untilWall: number): number {
+  let total = 0;
+  for (const p of f.pauses) {
+    const start = Math.max(p.start, f.takeoffWall);
+    const end = Math.min(p.end ?? untilWall, untilWall);
+    if (end > start) total += end - start;
+  }
+  return total;
+}
+
+/** Flight time in whole seconds from takeoff to `untilWall`, excluding pauses. */
+function flightSeconds(f: Flight, untilWall: number): number {
+  return Math.max(0, Math.trunc((untilWall - f.takeoffWall - pausedMs(f, untilWall)) / 1000));
 }
 
 /** MSFS 2024 parks the user aircraft here in menus and loading screens. */

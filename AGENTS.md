@@ -44,7 +44,8 @@ Use this file for repository-specific rules that help coding agents make safe ch
   - public states `DISCONNECTED -> ON_GROUND -> AIRBORNE` (heartbeat and `/api/status` shape unchanged)
   - only `live` samples change state; `out` = MSFS 2024 placeholder position (lat 0 / lon 0 or 90E) or implausible altitude; `hold` = menu/loading camera, replay, slew, missing values
   - the `Sim` system event is logged only, never used for gating (MSFS 2024 does not send SimStop on return to the main menu)
-  - flights shorter than 30 seconds are ignored, whatever the ending
+  - flight time (`elapsed_seconds`) excludes time paused (Pause_EX1) between takeoff and the end
+  - flights shorter than 30 seconds of flight time are ignored, whatever the ending
   - landing VS from `PLANE TOUCHDOWN NORMAL VELOCITY` at first contact, falling back to the trailing 6 s vertical-speed window; landing G is the per-frame peak up to 3 s after touchdown; bounces within 15 s merge
   - flights without a touchdown are recorded with notes `Crashed` or `Ended without landing`; agent started mid-air adds `Started in the air`
 - Treat SimConnect as optional: the agent must start and heartbeat when MSFS is closed, and must not spam the log while waiting (one line, then every 5 minutes).
