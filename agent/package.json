@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "start": "node --disable-warning=ExperimentalWarning dist/main.js"
+    "start": "node --disable-warning=ExperimentalWarning dist/main.js",
+    "import:volanta": "node dist/import_volanta.js"
   },
   "dependencies": {
     "node-simconnect": "^4.2.0"

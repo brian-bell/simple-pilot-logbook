@@ -22,6 +22,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `agent/src/config.ts`: reads `agent/.env` (`WORKER_URL`, `AGENT_TOKEN`, optional cadences and SimConnect endpoint)
 - `agent/src/airports.ts`: nearest-airport lookup and haversine helpers (bundled `agent/data/airports.json`)
 - `agent/src/log.ts`: rotating `agent/agent.log` (1 MB x 3)
+- `agent/src/import_volanta.ts`: one-off Volanta history import (`npm run import:volanta`), sends `flight.import` events with ids `volanta:<key>`; dry run unless `--send`
 - `agent/service/SimplePilotLogbook.xml.template` plus `install_service.ps1` and `uninstall_service.ps1` at the repo root: WinSW service tooling (WinSW 2.12.0, SHA-256 pinned in the installer)
 - `worker/wrangler.jsonc`: Worker config (D1 binding `DB`, R2 binding `BACKUPS`, nightly cron, assets from `../frontend`, `run_worker_first: ["/api/*"]`)
 - `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`)
@@ -52,7 +53,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
   - flights without a touchdown are recorded with notes `Crashed` or `Ended without landing`; agent started mid-air adds `Started in the air`
 - Treat SimConnect as optional: the agent must start and heartbeat when MSFS is closed, and must not spam the log while waiting (one line, then every 5 minutes).
 - Fixed-size SimVar strings are read as NUL-padded UTF-8 (`readFixedString`), not through node-simconnect's latin1 string readers.
-- Events go to the outbox first and are deleted only after a 2xx from the Worker. Heartbeats are send-or-drop and never queued.
+- Events go to the outbox first and are deleted only after a 2xx from the Worker. Heartbeats are send-or-drop and never queued. The one-off Volanta importer posts directly instead: the export file is its durable copy and its fixed event ids make a re-run finish an interrupted import.
 - Never log `AGENT_TOKEN` (or any token). Log status codes and response snippets only.
 - Config is read from `agent/.env` next to the code (`AGENT_DIR` from `import.meta.url`), not from the current working directory.
 - `node:sqlite` still prints an ExperimentalWarning on Node 22/24; every launcher passes `--disable-warning=ExperimentalWarning`.

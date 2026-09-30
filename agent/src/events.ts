@@ -34,7 +34,7 @@ export const FLIGHT_FIELDS = [
 export type FlightField = (typeof FLIGHT_FIELDS)[number];
 export type FlightRecord = Record<FlightField, string | number | null>;
 
-export type EventType = "agent.heartbeat" | "flight.takeoff" | "flight.position" | "flight.landing";
+export type EventType = "agent.heartbeat" | "flight.takeoff" | "flight.position" | "flight.landing" | "flight.import";
 
 export interface AgentEvent {
   id: string;
