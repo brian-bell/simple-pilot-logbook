@@ -6,7 +6,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 ## Project Snapshot
 - App: `Simple Pilot Logbook`
 - Goal: detect MSFS flights automatically on the sim PC and display them in a cloud-hosted web logbook
-- Architecture: a Node.js/TypeScript **agent** (Windows service via WinSW) sends events over HTTPS to a **Cloudflare Worker**; the Worker stores them in **D1** and serves the vanilla frontend as static assets
+- Architecture: a Node.js/TypeScript **agent** (Windows service via WinSW) sends events over HTTPS to a **Cloudflare Worker**; the Worker stores them in **D1** and serves the Preact frontend (vendored, no build step) as static assets
 - Primary platform: Windows 10/11 for the agent (live SimConnect); the Worker is platform-neutral TypeScript
 - Target sim: MSFS 2024 (SU6+). MSFS 2020 only best-effort through the KittyHawk protocol fallback
 - How it works (API, event contract, status, flight detection): `docs/architecture.md`
@@ -28,16 +28,16 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`)
 - `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `export.ts` (CSV export), `backup.ts` (nightly D1 -> R2 backup, `scheduled` handler), `status.ts`, `db.ts`, `types.ts` (env, event types, JSON helpers)
 - `worker/.dev.vars.example`: local dev tokens (`dev-agent` / `dev-viewer`)
-- `frontend/index.html`, `frontend/style.css`, `frontend/app.js`: vanilla frontend
+- `frontend/index.html` (import map + mount point), `frontend/style.css`, `frontend/js/*.js` (Preact components, `api.js`, `format.js`, `sort.js`), `frontend/vendor/*.mjs` (pinned Preact, preact/hooks, htm)
 - `docs/architecture.md`, `docs/cloud-deploy.md`, `docs/service-install.md`: how it works; deploy and local dev; service install/remove
 - `start.bat`: local agent launcher (npm ci on first run, build, run)
 - `.claude/launch.json`: `worker-dev` preview config (Windows `cmd`, `wrangler dev` on port 8787)
 
 ## Working Rules
 - Keep changes minimal and scoped to the request.
-- If Worker API behavior changes, update `frontend/app.js` in the same task.
+- If Worker API behavior changes, update the frontend (`frontend/js/`) in the same task.
 - If the event contract changes, update `agent/src/events.ts`, `worker/src/events.ts` and `worker/src/types.ts` together, and the contract in `docs/architecture.md`.
-- Do not add frameworks, build tooling, or major abstractions unless explicitly requested (no Hono/Express in the Worker, no JS framework in the frontend; in the agent, `node-simconnect` is the only runtime dependency and HTTP is the global `fetch`).
+- Do not add frameworks, build tooling, or major abstractions unless explicitly requested (no Hono/Express in the Worker, in the frontend, Preact + htm is the only framework, vendored under `frontend/vendor/` with no bundler, npm install or build step; in the agent, `node-simconnect` is the only runtime dependency and HTTP is the global `fetch`).
 - Prefer small readable functions over broad refactors.
 
 ## Agent Guardrails
@@ -67,10 +67,12 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - Schema changes go through new files in `worker/migrations/`; never edit an applied migration.
 
 ## Frontend Guardrails
-- Keep the frontend dependency-free.
+- The only frontend dependencies are the three pinned files in `frontend/vendor/` (Preact, preact/hooks, htm), loaded through the import map in `index.html`. No CDN at runtime, no bundler, no npm install, no build step. Upgrading them means replacing the files and their version headers together.
+- Components use function components, hooks and htm tagged templates (`html` from `js/html.js`). No JSX, no class components.
 - All API calls go through `apiFetch()`; a 401 must show the sign-in overlay, not a "Disconnected" state.
 - Preserve status polling, sorting, modal details, and delete behavior.
-- Escape user- or sim-provided strings before injecting into HTML (`escHtml`); use `textContent` for messages.
+- Render sim- or user-provided strings as htm interpolations, which escape them. Never use `dangerouslySetInnerHTML` or `innerHTML`.
+- Keep `style.css` class names as the styling contract; no CSS-in-JS.
 - Maintain usable desktop and mobile layouts.
 
 ## Data And Compatibility
@@ -90,7 +92,7 @@ There is no formal automated test suite. After code changes, validate what appli
 
 ## Non-Goals
 Do not do these unless explicitly requested:
-- migrate to a JS framework
+- migrate to a different JS framework or add a frontend build step
 - replace D1 or the SQLite outbox
 - redesign the UI broadly
 - rewrite the app architecture
