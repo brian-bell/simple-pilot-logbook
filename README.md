@@ -89,6 +89,7 @@ All `/api/*` routes require `Authorization: Bearer <token>` and return JSON. The
 | `POST` | `/api/events` | agent | Ingest 1–20 events (see below) |
 | `GET` | `/api/status` | viewer | Live state + current flight (if airborne) |
 | `GET` | `/api/flights` | viewer | Paginated flight list (`?limit=&offset=`) |
+| `GET` | `/api/flights/export.csv` | viewer | Download every flight as CSV (backup) |
 | `GET` | `/api/flights/{id}` | viewer | Single flight detail |
 | `DELETE` | `/api/flights/{id}` | viewer | Delete a flight entry (its events are kept) |
 

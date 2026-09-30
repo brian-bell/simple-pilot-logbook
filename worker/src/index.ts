@@ -11,6 +11,7 @@
 
 import { bearerMatches, unauthorized } from "./auth";
 import { ingestEvents } from "./events";
+import { exportFlightsCsv } from "./export";
 import { deleteFlight, getFlight, listFlights } from "./flights";
 import { getStatus } from "./status";
 import { json } from "./types";
@@ -46,6 +47,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (isIngest) return ingestEvents(request, env);
   if (method === "GET" && path === "/api/status") return getStatus(env);
   if (method === "GET" && path === "/api/flights") return listFlights(env, url.searchParams);
+  if (method === "GET" && path === "/api/flights/export.csv") return exportFlightsCsv(env);
 
   const match = FLIGHT_ID_RE.exec(path);
   if (match) {
