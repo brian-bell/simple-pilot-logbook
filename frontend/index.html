@@ -5,49 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pilot Logbook</title>
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "./vendor/preact.mjs",
+        "preact/hooks": "./vendor/preact-hooks.mjs",
+        "htm": "./vendor/htm.mjs"
+      }
+    }
+  </script>
 </head>
 <body>
 
   <!-- ================================================================
-       HEADER
+       APP SHELL  (header, status, active flight banner; rendered by js/app.js)
+       display: contents keeps the sticky header scoped to <body>.
   ================================================================ -->
-  <header class="app-header">
-    <div class="header-left">
-      <span class="header-icon">&#9992;</span>
-      <h1>Pilot Logbook</h1>
-    </div>
-    <div class="header-right">
-      <button class="btn-signout hidden" id="btn-signout" type="button" title="Forget the saved viewer token">Sign out</button>
-      <span class="status-label" id="status-label">Connecting…</span>
-      <span class="status-dot" id="status-dot"></span>
-    </div>
-  </header>
-
-  <!-- ================================================================
-       ACTIVE FLIGHT BANNER  (hidden when on ground)
-  ================================================================ -->
-  <div class="active-banner hidden" id="active-banner">
-    <div class="banner-row">
-      <span class="banner-segment">
-        <span class="banner-key">From</span>
-        <strong id="b-dep">—</strong>
-      </span>
-      <span class="banner-arrow">&#10132;</span>
-      <span class="banner-segment">
-        <span class="banner-key">Aircraft</span>
-        <strong id="b-aircraft">—</strong>
-      </span>
-      <span class="banner-segment">
-        <span class="banner-key">Altitude</span>
-        <strong id="b-alt">—</strong>
-        <span class="banner-unit">ft</span>
-      </span>
-      <span class="banner-segment">
-        <span class="banner-key">Elapsed</span>
-        <strong id="b-elapsed">—</strong>
-      </span>
-    </div>
-  </div>
+  <div id="app" style="display: contents"></div>
 
   <!-- ================================================================
        MAIN CONTENT
@@ -79,7 +53,7 @@
           </tr>
         </thead>
         <tbody id="flight-rows">
-          <!-- populated by app.js -->
+          <!-- populated by js/main.js -->
         </tbody>
       </table>
     </div>

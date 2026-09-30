@@ -1,13 +1,17 @@
 /**
  * Simple Pilot Logbook — Frontend
  *
- * Polls /api/status every 3 s for live SimConnect state.
- * Polls /api/flights every 10 s (and on first load) for the logbook table.
+ * The header, status indicator and live-flight banner are Preact components
+ * (app.js, polling /api/status every 3 s). The sign-in overlay, the logbook
+ * table (polled from /api/flights every 10 s), the detail modal and CSV export
+ * are still vanilla DOM code here until the later migration PRs.
  * Every /api call carries a bearer token (the "viewer token") that is kept in
  * localStorage; a 401 brings up the sign-in overlay and pauses polling.
- * All DOM manipulation is vanilla JS — no build step, no dependencies.
  */
 
+import { render } from "preact";
+import { html } from "./html.js";
+import { App } from "./app.js";
 import { UnauthorizedError, getToken, setToken, clearToken, apiFetch } from "./api.js";
 import { fmtDuration, fmtVS, fmtG, fmtNm, fmtAlt, fmtDate, routeLabel } from "./format.js";
 import { sortFlights } from "./sort.js";
@@ -16,7 +20,6 @@ import { sortFlights } from "./sort.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-const STATUS_INTERVAL = 3_000;   // ms between status polls
 const FLIGHTS_INTERVAL = 10_000; // ms between logbook refreshes
 
 // ---------------------------------------------------------------------------
@@ -26,7 +29,6 @@ const FLIGHTS_INTERVAL = 10_000; // ms between logbook refreshes
 let _flights = [];
 let _sortCol = "date";
 let _sortDir = "desc";   // "asc" | "desc"
-let _statusTimer = null;
 let _flightsTimer = null;
 
 // ---------------------------------------------------------------------------
@@ -38,9 +40,7 @@ function showAuth(message) {
   stopPolling();
   document.getElementById("auth-error").textContent = message || "";
   document.getElementById("auth-overlay").classList.remove("hidden");
-  document.getElementById("btn-signout").classList.add("hidden");
-  applyStatus({ connected: false, state: "DISCONNECTED", current_flight: null, agent_seen_at: null });
-  document.getElementById("status-label").textContent = "Signed out";
+  renderShell(false);
   const input = document.getElementById("auth-token");
   input.value = "";
   input.focus();
@@ -48,7 +48,13 @@ function showAuth(message) {
 
 function hideAuth() {
   document.getElementById("auth-overlay").classList.add("hidden");
-  document.getElementById("btn-signout").classList.remove("hidden");
+  renderShell(true);
+}
+
+/** Render the Preact shell (header, status, banner); it polls status while signed in. */
+function renderShell(signedIn) {
+  render(html`<${App} signedIn=${signedIn} onSignOut=${signOut} onUnauthorized=${showAuth} />`,
+         document.getElementById("app"));
 }
 
 /** Save a token, verify it against /api/status, then start polling. */
@@ -74,86 +80,17 @@ function signOut() {
   showAuth("");
 }
 
+/** Start the logbook poll; the status poll is owned by <App>. */
 function startPolling() {
-  if (_statusTimer !== null) return;
-  pollStatus();
+  if (_flightsTimer !== null) return;
   loadFlights();
-  _statusTimer  = setInterval(pollStatus, STATUS_INTERVAL);
   _flightsTimer = setInterval(loadFlights, FLIGHTS_INTERVAL);
 }
 
 function stopPolling() {
-  if (_statusTimer !== null)  { clearInterval(_statusTimer);  _statusTimer = null; }
   if (_flightsTimer !== null) { clearInterval(_flightsTimer); _flightsTimer = null; }
 }
 
-
-// ---------------------------------------------------------------------------
-// Status polling
-// ---------------------------------------------------------------------------
-
-async function pollStatus() {
-  try {
-    const res = await apiFetch("/api/status");
-    if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    applyStatus(data);
-  } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      showAuth("Token rejected. Enter a valid viewer token.");
-      return;
-    }
-    applyStatus({ connected: false, state: "DISCONNECTED", current_flight: null, agent_seen_at: null });
-  }
-}
-
-/** True when the agent has heartbeated within the last minute. */
-function agentRecentlySeen(agentSeenAt) {
-  if (!agentSeenAt) return false;
-  const seen = Date.parse(agentSeenAt);
-  return !isNaN(seen) && (Date.now() - seen) < 60_000;
-}
-
-function applyStatus({ connected, state, on_ground, paused, current_flight, agent_seen_at }) {
-  const dot   = document.getElementById("status-dot");
-  const label = document.getElementById("status-label");
-
-  dot.className = "status-dot";
-  if (connected && paused) {
-    dot.classList.add("paused");
-    label.textContent = "Paused";
-  } else if (state === "AIRBORNE") {
-    dot.classList.add("airborne");
-    label.textContent = "In Flight";
-  } else if (connected && on_ground) {
-    dot.classList.add("on-ground");
-    label.textContent = "On Ground";
-  } else if (connected) {
-    dot.classList.add("connected");
-    label.textContent = "Connected";
-  } else {
-    dot.classList.add("disconnected");
-    // Agent heartbeating but MSFS closed → "Disconnected"; no agent at all → "Agent offline".
-    label.textContent = agentRecentlySeen(agent_seen_at) ? "Disconnected" : "Agent offline";
-  }
-
-  const banner = document.getElementById("active-banner");
-  if (state === "AIRBORNE" && current_flight) {
-    banner.classList.remove("hidden");
-    const cf = current_flight;
-    document.getElementById("b-dep").textContent =
-      cf.departure_icao || "—";
-    const bannerReg = cf.aircraft_registration || cf.aircraft_title?.split(" ").slice(0, 3).join(" ");
-    document.getElementById("b-aircraft").textContent =
-      [cf.aircraft_type, bannerReg].filter(Boolean).join(" · ") || "—";
-    document.getElementById("b-alt").textContent =
-      cf.altitude_ft != null ? Math.round(cf.altitude_ft).toLocaleString() : "—";
-    document.getElementById("b-elapsed").textContent =
-      fmtDuration(cf.elapsed_seconds);
-  } else {
-    banner.classList.add("hidden");
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Flights table
@@ -460,8 +397,6 @@ document.getElementById("auth-form").addEventListener("submit", e => {
   document.getElementById("auth-error").textContent = "";
   signIn(token);
 });
-
-document.getElementById("btn-signout").addEventListener("click", signOut);
 
 if (getToken()) {
   hideAuth();
