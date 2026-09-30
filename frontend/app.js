@@ -273,9 +273,8 @@ function applyStatus({ connected, state, on_ground, paused, current_flight, agen
     const cf = current_flight;
     document.getElementById("b-dep").textContent =
       cf.departure_icao || "—";
-    const bannerReg = cf.aircraft_registration || cf.aircraft_title?.split(" ").slice(0, 3).join(" ");
     document.getElementById("b-aircraft").textContent =
-      [cf.aircraft_type, bannerReg].filter(Boolean).join(" · ") || "—";
+      cf.aircraft_registration || cf.aircraft_title?.split(" ").slice(0, 3).join(" ") || "—";
     document.getElementById("b-alt").textContent =
       cf.altitude_ft != null ? Math.round(cf.altitude_ft).toLocaleString() : "—";
     document.getElementById("b-elapsed").textContent =
@@ -289,21 +288,11 @@ function applyStatus({ connected, state, on_ground, paused, current_flight, agen
 // Flights table
 // ---------------------------------------------------------------------------
 
-/** The Worker returns at most 500 flights per page. */
-const FLIGHTS_PAGE_SIZE = 500;
-
 async function loadFlights() {
   try {
-    const flights = [];
-    let total = 0;
-    for (;;) {
-      const res = await apiFetch(`/api/flights?limit=${FLIGHTS_PAGE_SIZE}&offset=${flights.length}`);
-      if (!res.ok) throw new Error(res.status);
-      const page = await res.json();
-      flights.push(...page.flights);
-      total = page.total;
-      if (page.flights.length === 0 || flights.length >= total) break;
-    }
+    const res = await apiFetch("/api/flights?limit=200");
+    if (!res.ok) throw new Error(res.status);
+    const { flights, total } = await res.json();
     _flights = flights;
     renderTable();
 
@@ -326,7 +315,7 @@ function sortedFlights() {
     let va, vb;
     switch (col) {
       case "date":        va = a.date || ""; vb = b.date || ""; break;
-      case "aircraft":    va = aircraftSortKey(a); vb = aircraftSortKey(b); break;
+      case "aircraft":    va = a.aircraft_registration || a.aircraft_title || ""; vb = b.aircraft_registration || b.aircraft_title || ""; break;
       case "from":        va = a.departure_icao || ""; vb = b.departure_icao || ""; break;
       case "to":          va = a.arrival_icao || ""; vb = b.arrival_icao || ""; break;
       case "distance_nm": va = a.distance_nm ?? -Infinity; vb = b.distance_nm ?? -Infinity; break;
@@ -340,11 +329,6 @@ function sortedFlights() {
     if (va > vb) return dir;
     return 0;
   });
-}
-
-/** Sort by ICAO type first, so all C172s group together; older flights without one fall back as before. */
-function aircraftSortKey(f) {
-  return [f.aircraft_type, f.aircraft_registration || f.aircraft_title].filter(Boolean).join(" ");
 }
 
 function renderTable() {
@@ -381,7 +365,6 @@ function renderTable() {
     const depLabel  = routeLabel(flight, "departure");
     const arrLabel  = routeLabel(flight, "arrival");
     const vs        = fmtVS(flight.landing_vs_fpm);
-    const type      = flight.aircraft_type || "";
     const aircraft  = flight.aircraft_registration || "";
     const title     = flight.aircraft_title || "";
 
@@ -391,7 +374,6 @@ function renderTable() {
         <span class="date-time">${time}</span>
       </td>
       <td>
-        ${type ? `<span class="aircraft-type">${escHtml(type)}</span>` : ""}
         ${aircraft ? `<span class="aircraft-reg">${escHtml(aircraft)}</span>` : ""}
         <span class="aircraft-title" title="${escHtml(title)}">${escHtml(title || "—")}</span>
       </td>
@@ -469,41 +451,6 @@ document.getElementById("flight-rows").addEventListener("click", async e => {
 });
 
 // ---------------------------------------------------------------------------
-// Export (CSV backup of every flight)
-// ---------------------------------------------------------------------------
-
-const DEFAULT_EXPORT_NAME = "pilot-logbook.csv";
-
-function exportFilename(res) {
-  const m = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "");
-  return m ? m[1] : DEFAULT_EXPORT_NAME;
-}
-
-document.getElementById("btn-export").addEventListener("click", async e => {
-  const btn = e.currentTarget;
-  btn.disabled = true;
-  btn.textContent = "Exporting…";
-  try {
-    const res = await apiFetch("/api/flights/export.csv");
-    if (!res.ok) throw new Error(res.status);
-    const url = URL.createObjectURL(await res.blob());
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = exportFilename(res);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  } catch (err) {
-    if (err instanceof UnauthorizedError) showAuth("Token rejected. Enter a valid viewer token.");
-    else alert("Export failed. Could not reach the server.");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Export CSV";
-  }
-});
-
-// ---------------------------------------------------------------------------
 // Detail modal
 // ---------------------------------------------------------------------------
 
@@ -555,11 +502,7 @@ function openModal(flight) {
         <span class="detail-value">${escHtml(flight.aircraft_registration || "—")}</span>
       </div>
       <div class="detail-cell">
-        <span class="detail-label">Type (ICAO)</span>
-        <span class="detail-value">${escHtml(flight.aircraft_type || "—")}</span>
-      </div>
-      <div class="detail-cell detail-cell-wide">
-        <span class="detail-label">Title</span>
+        <span class="detail-label">Type / Title</span>
         <span class="detail-value">${escHtml(flight.aircraft_title || "—")}</span>
       </div>
     </div>
