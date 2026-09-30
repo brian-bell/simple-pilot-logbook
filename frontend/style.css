@@ -284,6 +284,14 @@ h1 {
   text-overflow: ellipsis;
 }
 
+.aircraft-type {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-right: 6px;
+}
+
 .aircraft-reg {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -395,6 +403,8 @@ h1 {
 }
 
 /* Detail grid */
+.detail-cell-wide { grid-column: 1 / -1; }
+
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

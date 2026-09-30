@@ -105,6 +105,7 @@ All `/api/*` routes require `Authorization: Bearer <token>` and return JSON. The
         "date": "2026-09-25T19:40:11+00:00",
         "aircraft_title": "Cessna 172 Skyhawk",
         "aircraft_registration": "N12345",
+        "aircraft_type": "C172",
         "departure_icao": "KSFO",
         "arrival_icao": "KOAK",
         "distance_nm": 11.2,
