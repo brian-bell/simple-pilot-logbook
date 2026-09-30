@@ -1,7 +1,6 @@
 # Todo List
 
 * Secret management
-* Database backups
 * Simbrief integration
 * Vatsim or BATC integration
 * Altitude corrected for pressure

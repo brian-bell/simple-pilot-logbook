@@ -451,6 +451,41 @@ document.getElementById("flight-rows").addEventListener("click", async e => {
 });
 
 // ---------------------------------------------------------------------------
+// Export (CSV backup of every flight)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_EXPORT_NAME = "pilot-logbook.csv";
+
+function exportFilename(res) {
+  const m = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "");
+  return m ? m[1] : DEFAULT_EXPORT_NAME;
+}
+
+document.getElementById("btn-export").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = "Exporting…";
+  try {
+    const res = await apiFetch("/api/flights/export.csv");
+    if (!res.ok) throw new Error(res.status);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportFilename(res);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) showAuth("Token rejected. Enter a valid viewer token.");
+    else alert("Export failed. Could not reach the server.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Export CSV";
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Detail modal
 // ---------------------------------------------------------------------------
 

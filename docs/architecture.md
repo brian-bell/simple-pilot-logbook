@@ -28,6 +28,7 @@ How the agent, the Worker and the frontend fit together: the event contract, the
 3. A heartbeat with the live status goes out every 10 seconds. It is sent directly and dropped on failure, never queued.
 4. The Worker stores flight events in D1 (`events`), materialises landings into `flights`, and overwrites the single `agent_status` row on each heartbeat.
 5. The browser polls `/api/status` and `/api/flights` with the viewer token.
+6. A nightly cron trigger on the Worker writes a CSV and a restorable SQL dump of D1 to the `BACKUPS` R2 bucket (see [cloud-deploy.md](cloud-deploy.md#backups)).
 
 ## HTTP API
 
@@ -38,6 +39,7 @@ All `/api/*` routes require `Authorization: Bearer <token>` and return JSON. The
 | `POST` | `/api/events` | agent | Ingest 1–20 events (see below) |
 | `GET` | `/api/status` | viewer | Live state + current flight (if airborne) |
 | `GET` | `/api/flights` | viewer | Paginated flight list (`?limit=&offset=`, default 100, max 500) |
+| `GET` | `/api/flights/export.csv` | viewer | Download every flight as CSV (backup) |
 | `GET` | `/api/flights/{id}` | viewer | Single flight detail |
 | `DELETE` | `/api/flights/{id}` | viewer | Delete a flight entry (its events are kept) |
 
