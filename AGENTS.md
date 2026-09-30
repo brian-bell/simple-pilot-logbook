@@ -53,7 +53,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
   - flights without a touchdown are recorded with notes `Crashed` or `Ended without landing`; agent started mid-air adds `Started in the air`
 - Treat SimConnect as optional: the agent must start and heartbeat when MSFS is closed, and must not spam the log while waiting (one line, then every 5 minutes).
 - Fixed-size SimVar strings are read as NUL-padded UTF-8 (`readFixedString`), not through node-simconnect's latin1 string readers.
-- Events go to the outbox first and are deleted only after a 2xx from the Worker. Heartbeats are send-or-drop and never queued.
+- Events go to the outbox first and are deleted only after a 2xx from the Worker. Heartbeats are send-or-drop and never queued. The one-off Volanta importer posts directly instead: the export file is its durable copy and its fixed event ids make a re-run finish an interrupted import.
 - Never log `AGENT_TOKEN` (or any token). Log status codes and response snippets only.
 - Config is read from `agent/.env` next to the code (`AGENT_DIR` from `import.meta.url`), not from the current working directory.
 - `node:sqlite` still prints an ExperimentalWarning on Node 22/24; every launcher passes `--disable-warning=ExperimentalWarning`.
