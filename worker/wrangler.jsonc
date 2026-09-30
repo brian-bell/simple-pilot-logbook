@@ -25,6 +25,20 @@
     }
   ],
 
+  // Nightly backup target (backup.ts). Create once with:
+  //   npx wrangler r2 bucket create simple-pilot-logbook-backups
+  "r2_buckets": [
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "simple-pilot-logbook-backups"
+    }
+  ],
+
+  // Nightly D1 -> R2 backup at 03:30 UTC.
+  "triggers": {
+    "crons": ["30 3 * * *"]
+  },
+
   // Secrets (never in this file):
   //   npx wrangler secret put AGENT_TOKEN    - used by the local agent to POST /api/events
   //   npx wrangler secret put VIEWER_TOKEN   - used by the browser UI for every other /api route

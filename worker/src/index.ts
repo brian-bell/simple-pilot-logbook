@@ -3,6 +3,7 @@
  *
  * - /api/*           JSON API (bearer-token protected, see auth.ts)
  * - everything else  static frontend from ../frontend via Workers Static Assets
+ * - cron trigger     nightly D1 -> R2 backup (backup.ts)
  *
  * With `run_worker_first: ["/api/*"]` in wrangler.jsonc, non-API requests never
  * reach this code; the ASSETS fallthrough below is a safety net if that setting
@@ -10,6 +11,7 @@
  */
 
 import { bearerMatches, unauthorized } from "./auth";
+import { runBackup } from "./backup";
 import { ingestEvents } from "./events";
 import { exportFlightsCsv } from "./export";
 import { deleteFlight, getFlight, listFlights } from "./flights";
@@ -31,6 +33,10 @@ export default {
       console.error("unhandled error", err);
       return json({ error: "internal error" }, 500);
     }
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runBackup(env));
   },
 } satisfies ExportedHandler<Env>;
 

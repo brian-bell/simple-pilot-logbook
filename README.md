@@ -64,7 +64,7 @@ simple-pilot-logbook/
 │   ├── .env.example
 │   └── data/airports.json       # ~29 k airports (mwgg/Airports, open data)
 ├── worker/                      # Cloudflare Worker (TypeScript) + D1
-│   ├── wrangler.jsonc           # bindings: D1 "DB", static assets from ../frontend
+│   ├── wrangler.jsonc           # bindings: D1 "DB", R2 "BACKUPS", static assets, nightly cron
 │   ├── migrations/0001_init.sql # events, flights, agent_status tables
 │   └── src/                     # index.ts (router), auth.ts, events.ts, flights.ts, status.ts, db.ts
 ├── frontend/                    # vanilla HTML/CSS/JS served by the Worker as static assets

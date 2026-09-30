@@ -38,13 +38,21 @@ All commands below run from the `worker/` directory.
    npm run migrate:remote
    ```
 
-5. Generate two random tokens (run twice):
+5. Create the R2 bucket for the nightly backup (R2 must be enabled on the account once, under **R2** in the Cloudflare dashboard; the free tier covers this app):
+
+   ```powershell
+   npx wrangler r2 bucket create simple-pilot-logbook-backups
+   ```
+
+   The name must match `bucket_name` in `wrangler.jsonc`. The nightly cron trigger is configured in the same file and is created by `wrangler deploy`.
+
+6. Generate two random tokens (run twice):
 
    ```powershell
    node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
    ```
 
-6. Store them as Worker secrets (paste when prompted; they are never committed):
+7. Store them as Worker secrets (paste when prompted; they are never committed):
 
    ```powershell
    npx wrangler secret put AGENT_TOKEN
@@ -53,7 +61,7 @@ All commands below run from the `worker/` directory.
 
    `AGENT_TOKEN` is what the local agent sends. `VIEWER_TOKEN` is what you type into the web UI.
 
-7. Deploy:
+8. Deploy:
 
    ```powershell
    npx wrangler deploy
@@ -61,17 +69,39 @@ All commands below run from the `worker/` directory.
 
    Wrangler prints the URL, e.g. `https://simple-pilot-logbook.<account>.workers.dev`.
 
-8. Configure the agent on the sim PC: copy `agent\.env.example` to `agent\.env`, set `WORKER_URL` to that URL and `AGENT_TOKEN` to the first token. Then run `start.bat` once and check `agent\agent.log` shows no token errors, or install the service per [service-install.md](service-install.md).
+9. Configure the agent on the sim PC: copy `agent\.env.example` to `agent\.env`, set `WORKER_URL` to that URL and `AGENT_TOKEN` to the first token. Then run `start.bat` once and check `agent\agent.log` shows no token errors, or install the service per [service-install.md](service-install.md).
 
-9. Open the URL in a browser and enter the viewer token when prompted. It is kept in that browser's localStorage; use **Sign out** in the header to forget it.
+10. Open the URL in a browser and enter the viewer token when prompted. It is kept in that browser's localStorage; use **Sign out** in the header to forget it.
 
 ## Importing the old local logbook
 
 The one-off importer for the pre-Cloudflare `backend\logbook.db` (`agent\import_legacy.py`) was retired together with the Python agent after the migration was completed. It is still in git history at commit `84af342`; check out that commit and follow this document's version there if you need to import another old database.
 
+## Backups
+
+Two ways to get the logbook out of D1:
+
+- **Export CSV** in the web UI (or `GET /api/flights/export.csv` with the viewer token) downloads every flight as a CSV file.
+- A **nightly backup** runs at 03:30 UTC (cron trigger in `wrangler.jsonc`) and writes `backups/YYYY-MM-DD/flights.csv` and `backups/YYYY-MM-DD/logbook.sql` to the `simple-pilot-logbook-backups` R2 bucket. Backups older than 30 days are deleted by the same job. `logbook.sql` holds `INSERT OR IGNORE` statements for the `flights` and `events` tables.
+
+Browse backups in the Cloudflare dashboard under **R2 > simple-pilot-logbook-backups**, or download one by date:
+
+```powershell
+npx wrangler r2 object get simple-pilot-logbook-backups/backups/2026-09-30/logbook.sql --file logbook.sql --remote
+```
+
+Restore into a freshly created and migrated database (see One-time setup steps 3 and 4). Rows that already exist are skipped:
+
+```powershell
+npx wrangler d1 execute simple-pilot-logbook --remote --file logbook.sql
+```
+
+Run a backup on demand locally with `npx wrangler dev --test-scheduled`, then open `http://localhost:8787/__scheduled`; the objects land in the local R2 simulation (`npx wrangler r2 object get ... --local`). Cron runs and their `backup YYYY-MM-DD: ...` log lines show under the Worker's logs in the Cloudflare dashboard.
+
 ## Updating after code changes
 
 - Worker or frontend changed: `cd worker && npx wrangler deploy` (the frontend is uploaded as static assets with the Worker).
+- First deploy with the nightly backup: create the R2 bucket first (One-time setup step 5), otherwise `wrangler deploy` fails on the missing `BACKUPS` binding.
 - Schema changed: add a file under `worker/migrations/` (`npx wrangler d1 migrations create simple-pilot-logbook <name>`), then `npm run migrate:remote` before deploying.
 - Agent changed: pull on the sim PC and rerun `.\install_service.ps1` as Administrator (rebuilds and restarts the service), or run `start.bat`.
 

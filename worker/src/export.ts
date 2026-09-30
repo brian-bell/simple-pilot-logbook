@@ -22,7 +22,8 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export async function exportFlightsCsv(env: Env): Promise<Response> {
+/** Every flight as CSV text. Also used by the nightly R2 backup (backup.ts). */
+export async function flightsCsv(env: Env): Promise<string> {
   const { results } = await env.DB.prepare(
     `SELECT ${COLUMNS.join(", ")} FROM flights ORDER BY date ASC, id ASC`,
   ).all<Record<string, unknown>>();
@@ -31,9 +32,12 @@ export async function exportFlightsCsv(env: Env): Promise<Response> {
   for (const row of results ?? []) {
     lines.push(COLUMNS.map((c) => csvCell(row[c])).join(","));
   }
+  return lines.join("\r\n") + "\r\n";
+}
 
+export async function exportFlightsCsv(env: Env): Promise<Response> {
   const stamp = new Date().toISOString().slice(0, 10);
-  return new Response(lines.join("\r\n") + "\r\n", {
+  return new Response(await flightsCsv(env), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="pilot-logbook-${stamp}.csv"`,

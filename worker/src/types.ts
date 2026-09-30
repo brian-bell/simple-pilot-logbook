@@ -5,6 +5,8 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  /** R2 bucket for the nightly backup (backup.ts). */
+  BACKUPS: R2Bucket;
   /** Secret: bearer token the local agent uses for POST /api/events. */
   AGENT_TOKEN?: string;
   /** Secret: bearer token the browser UI uses for every other /api route. */
