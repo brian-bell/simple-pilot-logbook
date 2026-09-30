@@ -22,7 +22,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `agent/src/config.ts`: reads `agent/.env` (`WORKER_URL`, `AGENT_TOKEN`, optional cadences and SimConnect endpoint)
 - `agent/src/airports.ts`: nearest-airport lookup and haversine helpers (bundled `agent/data/airports.json`)
 - `agent/src/log.ts`: rotating `agent/agent.log` (1 MB x 3)
-- `agent/service/SimplePilotLogbook.xml.template`, `install_service.ps1`, `uninstall_service.ps1`: WinSW service tooling (WinSW 2.12.0, SHA-256 pinned in the installer)
+- `agent/service/SimplePilotLogbook.xml.template` plus `install_service.ps1` and `uninstall_service.ps1` at the repo root: WinSW service tooling (WinSW 2.12.0, SHA-256 pinned in the installer)
 - `worker/wrangler.jsonc`: Worker config (D1 binding `DB`, assets from `../frontend`, `run_worker_first: ["/api/*"]`)
 - `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`)
 - `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `status.ts`, `db.ts`, `types.ts` (env, event types, JSON helpers)
