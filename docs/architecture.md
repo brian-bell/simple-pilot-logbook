@@ -16,8 +16,8 @@ How the agent, the Worker and the frontend fit together: the event contract, the
 | Path | Contents |
 |---|---|
 | `agent/` | Node.js/TypeScript agent for the sim PC; `service/` holds the WinSW template, `data/airports.json` the bundled airport list (~29k airports, mwgg/Airports open data) |
-| `worker/` | Cloudflare Worker (TypeScript), `wrangler.jsonc`, D1 migrations |
-| `frontend/` | Preact + htm (vendored ES modules, no build step), served by Cloudflare as static assets |
+| `worker/` | Cloudflare Worker (TypeScript): API, nightly backup cron, `wrangler.jsonc`, D1 migrations |
+| `frontend/` | Preact + htm (vendored under `vendor/`, loaded through the import map in `index.html`, no build step), served by Cloudflare as static assets |
 | `docs/` | Deploy, service and architecture guides |
 | `start.bat`, `install_service.ps1`, `uninstall_service.ps1` | Windows launcher and service scripts |
 
@@ -111,9 +111,9 @@ AIRBORNE     ──landing──▶ ON_GROUND  (emits flight.landing 3 s after t
 - **Landing vertical speed** comes from `PLANE TOUCHDOWN NORMAL VELOCITY` at the first contact. If the sim does not update it, the most negative vertical speed in the 6 seconds before touchdown is used. A bounce within 15 s counts as the same landing.
 - **Landing G-force** is the peak G from the per-frame stream between just before touchdown and 3 seconds after it.
 - **Flights that do not end with a landing** are still recorded. A crash reported by the sim gets `notes = "Crashed"` and the crash site as arrival. Quitting to the main menu (90 s at the placeholder position), teleporting (Travel To, restart), MSFS closing or the agent stopping mid-flight give `notes = "Ended without landing"` with no arrival. If the agent starts while you are already airborne, the flight has no departure airport and `notes = "Started in the air"`.
-- Flights shorter than 30 seconds are discarded whatever the ending.
+- Flights shorter than 30 seconds of flight time are discarded whatever the ending.
 - Departure and arrival airports are the nearest airport in the bundled dataset within 10 nm; otherwise only coordinates are stored.
-- Duration is wall-clock time from takeoff to touchdown. Pauses are logged (`Pause_EX1`) but not subtracted.
+- Duration (`elapsed_seconds`) is the time from takeoff to touchdown minus any time the sim was paused (`Pause_EX1`) in between.
 - The `Sim` event is logged only: MSFS 2024 does not send SimStop when returning to the main menu.
 
 ## SimConnect connection

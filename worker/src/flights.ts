@@ -1,6 +1,6 @@
 /**
  * Flight read/delete routes. Response shapes match the old FastAPI backend so
- * frontend/app.js only needed an auth layer.
+ * the frontend only needed an auth layer.
  */
 
 import { clampInt, json } from "./types";
