@@ -189,6 +189,8 @@ export class FlightDetector {
   private lastSample: StateSample | null = null;
   /** Set when a pause starts while a flight or a parked aircraft is live; cleared by unpause or the main menu. */
   private pausedInFlight = false;
+  /** Last Pause_EX1 flags were nonzero, whether or not a flight was active. */
+  private simPaused = false;
 
   private readonly clock: Clock;
   private readonly nearest: (lat: number, lon: number) => NearestAirport | null;
@@ -209,6 +211,7 @@ export class FlightDetector {
     this.simRunning = null;
     this.phase = "SYNC";
     this.pausedInFlight = false;
+    this.simPaused = false;
     this.resetSampling();
   }
 
@@ -217,6 +220,7 @@ export class FlightDetector {
     this.endFlightInProgress(`sim disconnected (${reason})`);
     this.phase = "DISCONNECTED";
     this.pausedInFlight = false;
+    this.simPaused = false;
     this.sim = null;
     this.resetSampling();
   }
@@ -257,7 +261,8 @@ export class FlightDetector {
           event.flags !== 0 &&
           this.outSinceMono === null &&
           (this.pausedInFlight || this.flight !== null || this.liveOnGround());
-        if (this.flight) notePause(this.flight, event.flags !== 0, this.clock.wall());
+        this.simPaused = event.flags !== 0;
+        if (this.flight) notePause(this.flight, this.simPaused, this.clock.wall());
         break;
       case "crashed":
         log.warn("Sim reported a crash.");
@@ -485,7 +490,8 @@ export class FlightDetector {
       touchdownBaselineFps: s.touchdownNormalFps,
       touchdown: null,
       lastPositionMono: s.mono, // first position event follows one interval after takeoff
-      pauses: [],
+      // A flight first seen during an active pause (e.g. after a reconnect) starts inside that pause.
+      pauses: this.simPaused ? [{ start: s.wall, end: null }] : [],
     };
     this.flight = flight;
     this.phase = "AIRBORNE";
