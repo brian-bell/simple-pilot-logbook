@@ -78,18 +78,21 @@ All commands below run from the `worker/` directory.
 Two ways to get the logbook out of D1:
 
 - **Export CSV** in the web UI (or `GET /api/flights/export.csv` with the viewer token) downloads every flight as a CSV file.
-- A **nightly backup** runs at 03:30 UTC (cron trigger in `wrangler.jsonc`) and writes `backups/YYYY-MM-DD/flights.csv` and `backups/YYYY-MM-DD/logbook.sql` to the `simple-pilot-logbook-backups` R2 bucket. Backups older than 30 days are deleted by the same job. `logbook.sql` holds `INSERT OR IGNORE` statements for the `flights` and `events` tables.
+- A **nightly backup** runs at 03:30 UTC (cron trigger in `wrangler.jsonc`) and writes to the `simple-pilot-logbook-backups` R2 bucket:
+  - `backups/YYYY-MM-DD/flights.csv` and `backups/YYYY-MM-DD/flights.sql`: the whole logbook as CSV and as `INSERT OR IGNORE` statements. Days older than 30 are deleted by the same job.
+  - `backups/events/events-NNNNNN.sql`: the raw event log as `INSERT OR IGNORE` statements, 5000 events per file. The log only grows, so it is backed up incrementally: each run rewrites only the file still filling up (and at most 20 files), which keeps a run within D1's per-invocation query limit however large the log gets. These files are never pruned.
 
-Browse backups in the Cloudflare dashboard under **R2 > simple-pilot-logbook-backups**, or download one by date:
+Browse backups in the Cloudflare dashboard under **R2 > simple-pilot-logbook-backups**, or download one:
 
 ```powershell
-npx wrangler r2 object get simple-pilot-logbook-backups/backups/2026-09-30/logbook.sql --file logbook.sql --remote
+npx wrangler r2 object get simple-pilot-logbook-backups/backups/2026-09-30/flights.sql --file flights.sql --remote
 ```
 
-Restore into a freshly created and migrated database (see One-time setup steps 3 and 4). Rows that already exist are skipped:
+Restore into a freshly created and migrated database (see One-time setup steps 3 and 4). `flights.sql` alone brings the logbook back; add the `events-*.sql` files too if you want the raw event history (any order; rows that already exist are skipped):
 
 ```powershell
-npx wrangler d1 execute simple-pilot-logbook --remote --file logbook.sql
+npx wrangler d1 execute simple-pilot-logbook --remote --file flights.sql
+npx wrangler d1 execute simple-pilot-logbook --remote --file events-000000.sql
 ```
 
 Run a backup on demand locally with `npx wrangler dev --test-scheduled`, then open `http://localhost:8787/__scheduled`; the objects land in the local R2 simulation (`npx wrangler r2 object get ... --local`). Cron runs and their `backup YYYY-MM-DD: ...` log lines show under the Worker's logs in the Cloudflare dashboard.
