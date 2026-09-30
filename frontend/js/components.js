@@ -1,10 +1,11 @@
 /**
- * Preact components: the app shell (header, status indicator, live-flight banner)
- * and the logbook (toolbar, flight table, detail modal).
+ * Preact components: the app shell (header, status indicator, live-flight banner),
+ * the logbook (toolbar, export button, flight table, detail modal) and sign-in.
  */
 
-import { useEffect } from "preact/hooks";
+import { useState, useEffect, useRef } from "preact/hooks";
 import { html } from "./html.js";
+import { apiFetch, UnauthorizedError } from "./api.js";
 import { fmtDuration, fmtVS, fmtG, fmtNm, fmtAlt, fmtDate, routeLabel } from "./format.js";
 
 /** True when the agent has heartbeated within the last minute. */
@@ -92,14 +93,51 @@ export function ActiveBanner({ status }) {
 // ---------------------------------------------------------------------------
 
 /** Toolbar above the table: title, flight count and the CSV export button. */
-export function Toolbar({ total, onExport }) {
+export function Toolbar({ total, onUnauthorized }) {
   return html`
     <div class="toolbar">
       <span class="toolbar-title">Flight Log</span>
       <span class="flight-count" id="flight-count">${total > 0 ? `${total} flight${total !== 1 ? "s" : ""}` : ""}</span>
-      <button class="btn-export" id="btn-export" type="button" title="Download every flight as a CSV file"
-              onClick=${onExport}>Export CSV</button>
+      <${ExportButton} onUnauthorized=${onUnauthorized} />
     </div>
+  `;
+}
+
+const DEFAULT_EXPORT_NAME = "pilot-logbook.csv";
+
+function exportFilename(res) {
+  const m = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "");
+  return m ? m[1] : DEFAULT_EXPORT_NAME;
+}
+
+/** Downloads every flight as CSV; disabled and relabelled while the download runs. */
+export function ExportButton({ onUnauthorized }) {
+  const [busy, setBusy] = useState(false);
+
+  async function exportCsv() {
+    setBusy(true);
+    try {
+      const res = await apiFetch("/api/flights/export.csv");
+      if (!res.ok) throw new Error(res.status);
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exportFilename(res);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) onUnauthorized("Token rejected. Enter a valid viewer token.");
+      else alert("Export failed. Could not reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return html`
+    <button class="btn-export" id="btn-export" type="button" title="Download every flight as a CSV file"
+            disabled=${busy} onClick=${exportCsv}>${busy ? "Exporting…" : "Export CSV"}</button>
   `;
 }
 
@@ -254,6 +292,47 @@ export function FlightModal({ flight, onClose }) {
             </div>
           `}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Sign-in overlay, shown while signed out. onSignIn(token) resolves true when the
+ * token was accepted; otherwise the field is cleared and refocused.
+ */
+export function SignIn({ message, onSignIn }) {
+  const [token, setTokenValue] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => inputRef.current?.focus(), [message]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const value = token.trim();
+    if (!value) return;
+    if (!(await onSignIn(value))) {
+      setTokenValue("");
+      inputRef.current?.focus();
+    }
+  }
+
+  return html`
+    <div class="modal-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <div class="modal auth-modal">
+        <div class="modal-header">
+          <span class="modal-title" id="auth-title">Sign in</span>
+        </div>
+        <form class="modal-body auth-form" id="auth-form" autocomplete="off" onSubmit=${handleSubmit}>
+          <p class="auth-hint">Enter the viewer token for this logbook. It is kept only in this browser.</p>
+          <input type="password" id="auth-token" class="auth-input" placeholder="Viewer token"
+                 autocomplete="off" spellcheck="false" required ref=${inputRef}
+                 value=${token} onInput=${e => setTokenValue(e.currentTarget.value)} />
+          <div class="auth-actions">
+            <span class="auth-error" id="auth-error" role="alert">${message}</span>
+            <button type="submit" class="btn-primary">Save</button>
+          </div>
+        </form>
       </div>
     </div>
   `;
