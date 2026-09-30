@@ -11,6 +11,7 @@ A small Node.js **agent** on the sim PC watches MSFS through SimConnect, detects
 - **Live status** — the header shows In Flight, On Ground, Paused, Connected, Disconnected (MSFS closed) or Agent offline; while airborne a banner shows the aircraft, altitude and elapsed time
 - **Sortable logbook** — click any column header to sort
 - **Detail modal** — click any row for full flight data
+- **Backups** — **Export CSV** downloads the whole logbook; a nightly job also copies it to Cloudflare R2
 - **Hosted logbook** — the web app runs on Cloudflare and works whether or not the sim PC is on
 - **Offline resilient agent** — events are queued locally and uploaded when the Worker is reachable again
 - **Token protected** — every API call needs a bearer token; the UI asks for a viewer token once per browser
@@ -22,7 +23,7 @@ A small Node.js **agent** on the sim PC watches MSFS through SimConnect, detects
 | Agent (sim PC) | Windows 10/11 | SimConnect only runs on Windows |
 | Agent (sim PC) | Node.js 22.13+ and npm | Talks SimConnect directly through [node-simconnect](https://github.com/EvenAR/node-simconnect); no SimConnect SDK or DLL needed |
 | Agent (sim PC) | Microsoft Flight Simulator 2024 | Built for SU6 (1.8.x) and later. MSFS 2020 is supported best-effort through the older SimConnect protocol |
-| Worker | Cloudflare account (free plan is enough) | D1 + Workers Static Assets |
+| Worker | Cloudflare account (free plan is enough) | D1, R2 (nightly backup) and Workers Static Assets |
 | Deploying | Node.js 22+ and npm | Only on the machine you deploy from; wrangler 4.141 requires Node 22 |
 
 ## Quick Start

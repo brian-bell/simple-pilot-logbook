@@ -28,7 +28,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`)
 - `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `export.ts` (CSV export), `backup.ts` (nightly D1 -> R2 backup, `scheduled` handler), `status.ts`, `db.ts`, `types.ts` (env, event types, JSON helpers)
 - `worker/.dev.vars.example`: local dev tokens (`dev-agent` / `dev-viewer`)
-- `frontend/index.html` (import map + mount point), `frontend/style.css`, `frontend/js/*.js` (Preact components, `api.js`, `format.js`, `sort.js`), `frontend/vendor/*.mjs` (pinned Preact, preact/hooks, htm)
+- `frontend/index.html` (import map + mount point), `frontend/style.css`, `frontend/js/*.js` (`main.js` entry, `app.js` state and polling, `components.js`, `hooks.js`, `html.js`, `api.js`, `format.js`, `sort.js`), `frontend/vendor/*.mjs` (pinned Preact, preact/hooks, htm)
 - `docs/architecture.md`, `docs/cloud-deploy.md`, `docs/service-install.md`: how it works; deploy and local dev; service install/remove
 - `start.bat`: local agent launcher (npm ci on first run, build, run)
 - `.claude/launch.json`: `worker-dev` preview config (Windows `cmd`, `wrangler dev` on port 8787)

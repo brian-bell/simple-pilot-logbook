@@ -99,7 +99,7 @@ Run a backup on demand locally with `npx wrangler dev --test-scheduled`, then op
 
 ## Updating after code changes
 
-- Worker or frontend changed: `cd worker && npx wrangler deploy` (the frontend is uploaded as static assets with the Worker).
+- Worker or frontend changed: `cd worker && npx wrangler deploy` (the frontend is uploaded as static assets with the Worker). If the pull brought new files in `worker/migrations/`, run `npm run migrate:remote` first: a Worker that writes a new column fails until the column exists.
 - First deploy with the nightly backup: create the R2 bucket first (One-time setup step 5), otherwise `wrangler deploy` fails on the missing `BACKUPS` binding.
 - Schema changed: add a file under `worker/migrations/` (`npx wrangler d1 migrations create simple-pilot-logbook <name>`), then `npm run migrate:remote` before deploying.
 - Agent changed: pull on the sim PC and rerun `.\install_service.ps1` as Administrator (see [service-install.md](service-install.md)), or run `start.bat`.
