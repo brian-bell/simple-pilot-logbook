@@ -18,7 +18,7 @@ A small Node.js **agent** on the sim PC watches MSFS through SimConnect, detects
 - **Automatic flight recording** — detects takeoffs and landings via SimConnect; no manual input required
 - **Per-flight data**: departure airport, arrival airport, straight-line distance (nm), flight duration, maximum altitude, landing vertical speed, landing G-force, aircraft type and registration
 - **Live status banner** — shows current aircraft, altitude, and elapsed time while airborne
-- **Status indicator** — green when MSFS is connected, red when MSFS is closed or the agent is offline
+- **Status indicator** — header shows In Flight, Paused, On Ground, Connected (MSFS in the menu), Disconnected (MSFS closed) or Agent offline
 - **Sortable logbook** — click any column header to sort
 - **Detail modal** — click any row for full flight data
 - **Hosted logbook** — the web app runs on Cloudflare and works whether or not the sim PC is on
@@ -65,7 +65,7 @@ simple-pilot-logbook/
 │   └── data/airports.json       # ~29 k airports (mwgg/Airports, open data)
 ├── worker/                      # Cloudflare Worker (TypeScript) + D1
 │   ├── wrangler.jsonc           # bindings: D1 "DB", static assets from ../frontend
-│   ├── migrations/0001_init.sql # events, flights, agent_status tables
+│   ├── migrations/              # D1 schema: events, flights, agent_status (+ on_ground, paused)
 │   └── src/                     # index.ts (router), auth.ts, events.ts, flights.ts, status.ts, db.ts
 ├── frontend/                    # vanilla HTML/CSS/JS served by the Worker as static assets
 │   ├── index.html
@@ -87,7 +87,7 @@ All `/api/*` routes require `Authorization: Bearer <token>` and return JSON. The
 | Method | Path | Token | Description |
 |--------|------|-------|-------------|
 | `POST` | `/api/events` | agent | Ingest 1–20 events (see below) |
-| `GET` | `/api/status` | viewer | Live state + current flight (if airborne) |
+| `GET` | `/api/status` | viewer | Live state, `on_ground` and `paused` flags, current flight (if airborne) |
 | `GET` | `/api/flights` | viewer | Paginated flight list (`?limit=&offset=`) |
 | `GET` | `/api/flights/{id}` | viewer | Single flight detail |
 | `DELETE` | `/api/flights/{id}` | viewer | Delete a flight entry (its events are kept) |
