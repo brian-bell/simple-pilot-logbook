@@ -236,13 +236,77 @@ function DetailCell({ label, value, cls = "", wide = false }) {
   `;
 }
 
+/** Cruise altitude as a flight level from 10,000 ft up. */
+function fmtCruise(ft) {
+  if (ft == null) return "—";
+  return ft >= 10000 ? `FL${Math.round(ft / 100)}` : fmtAlt(ft);
+}
+
+function fmtFuel(amount, units) {
+  if (amount == null) return "—";
+  return `${Math.round(amount).toLocaleString()} ${units || ""}`.trim();
+}
+
+/** How the actual arrival compares with the plan, or null when there is nothing to say. */
+function divertedLabel(flight, plan) {
+  const arr = flight.arrival_icao;
+  if (!arr || !plan.destination_icao || arr === plan.destination_icao) return null;
+  return arr === plan.alternate_icao ? `Landed at alternate ${arr}` : `Diverted to ${arr}`;
+}
+
+/** SimBrief plan attached to the flight (GET /api/flights/{id} → flight_plan). */
+function FlightPlanSection({ flight, plan }) {
+  const generated = fmtDate(plan.generated_at);
+  const diverted = divertedLabel(flight, plan);
+  const planned = `${plan.origin_icao || "?"} → ${plan.destination_icao || "?"}` +
+    (plan.alternate_icao ? ` (altn ${plan.alternate_icao})` : "");
+  return html`
+    <p class="detail-section">Flight Plan (SimBrief)</p>
+    <div class="detail-grid">
+      <${DetailCell} label="Callsign" value=${plan.callsign || "—"} />
+      <${DetailCell} label="Planned" value=${planned} />
+      ${diverted && html`<${DetailCell} label="Arrival vs Plan" value=${diverted} cls="plan-diverted" wide />`}
+      <${DetailCell} label="Route" value=${plan.route || "—"} wide />
+      <${DetailCell} label="Cruise" value=${fmtCruise(plan.cruise_altitude_ft)} />
+      <${DetailCell} label="Planned Distance" value=${`${fmtNm(plan.route_distance_nm)} nm`} />
+      <${DetailCell} label="Est. Enroute" value=${fmtDuration(plan.est_time_enroute_s)} />
+      <${DetailCell} label="Block / Trip Fuel"
+                     value=${`${fmtFuel(plan.block_fuel, plan.fuel_units)} / ${fmtFuel(plan.trip_fuel, plan.fuel_units)}`} />
+      <${DetailCell} label="Plan Aircraft" value=${[plan.aircraft_type, plan.aircraft_registration].filter(Boolean).join(" · ") || "—"} />
+      <${DetailCell} label="Generated" value=${`${generated.date} ${generated.time}`} />
+      ${plan.pdf_url && html`
+        <div class="detail-cell detail-cell-wide">
+          <span class="detail-label">OFP</span>
+          <a class="detail-value detail-link" href=${plan.pdf_url} target="_blank" rel="noopener noreferrer">
+            Open PDF on SimBrief
+          </a>
+        </div>
+      `}
+    </div>
+  `;
+}
+
 /** Flight detail modal; overlay click, the close button and Escape all close it. */
 export function FlightModal({ flight, onClose }) {
+  const [plan, setPlan] = useState(null);
+
   useEffect(() => {
     const onKey = e => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // The list rows carry no plan; fetch the detail for it. Best effort: a failure
+  // just leaves the section out (a 401 is caught by the next poll).
+  useEffect(() => {
+    let live = true;
+    setPlan(null);
+    apiFetch(`/api/flights/${flight.id}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(detail => { if (live && detail?.flight_plan) setPlan(detail.flight_plan); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [flight.id]);
 
   const dep = routeLabel(flight, "departure");
   const arr = routeLabel(flight, "arrival");
@@ -282,6 +346,8 @@ export function FlightModal({ flight, onClose }) {
             <${DetailCell} label="Landing G-Force" value=${fmtG(flight.landing_g_force)} />
             <${DetailCell} label="Date / Time" value=${`${date} ${time}`} />
           </div>
+
+          ${plan && html`<${FlightPlanSection} flight=${flight} plan=${plan} />`}
 
           ${flight.notes && html`
             <p class="detail-section">Notes</p>

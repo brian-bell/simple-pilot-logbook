@@ -11,6 +11,8 @@ export interface Env {
   AGENT_TOKEN?: string;
   /** Secret: bearer token the browser UI uses for every other /api route. */
   VIEWER_TOKEN?: string;
+  /** Secret (optional): SimBrief pilot ID; enables flight plan attachment (simbrief.ts). */
+  SIMBRIEF_USERID?: string;
 }
 
 export const EVENT_TYPES = [

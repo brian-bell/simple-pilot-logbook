@@ -4,9 +4,11 @@
  * Body: { "events": [ { id, type, ts, payload }, ... ] }, 1..MAX_EVENTS items.
  * Every event is idempotent on its client-generated id, so the agent can retry
  * freely. All statements for one request run in a single atomic D1 batch.
+ * A newly seen flight.takeoff then fetches its SimBrief plan in the background.
  */
 
 import { insertEvent, insertFlightGuarded, normaliseFlight, upsertStatus } from "./db";
+import { attachSimbriefPlan } from "./simbrief";
 import { EVENT_TYPES, json } from "./types";
 import type { Env, EventType, IngestEvent } from "./types";
 
@@ -14,7 +16,7 @@ const MAX_BODY_BYTES = 1_000_000;
 /** 20 events x 2 statements + 1 heartbeat upsert = 41, under D1's 50-queries-per-invocation free limit. */
 const MAX_EVENTS = 20;
 
-export async function ingestEvents(request: Request, env: Env): Promise<Response> {
+export async function ingestEvents(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > MAX_BODY_BYTES) return json({ error: "payload too large" }, 413);
 
@@ -38,6 +40,7 @@ export async function ingestEvents(request: Request, env: Env): Promise<Response
 
   const stmts: D1PreparedStatement[] = [];
   const flightStmtIdx: number[] = [];
+  const takeoffs: { idx: number; ev: IngestEvent }[] = [];
   let heartbeat: IngestEvent | null = null;
 
   for (let i = 0; i < events.length; i++) {
@@ -50,6 +53,10 @@ export async function ingestEvents(request: Request, env: Env): Promise<Response
         break;
 
       case "flight.takeoff":
+        takeoffs.push({ idx: stmts.length, ev });
+        stmts.push(insertEvent(env.DB, ev));
+        break;
+
       case "flight.position":
         stmts.push(insertEvent(env.DB, ev));
         break;
@@ -73,6 +80,11 @@ export async function ingestEvents(request: Request, env: Env): Promise<Response
     (n, idx) => n + ((results[idx]?.meta?.changes ?? 0) > 0 ? 1 : 0),
     0,
   );
+
+  // Only the first delivery of a takeoff fetches its plan; a retry inserts nothing.
+  for (const { idx, ev } of takeoffs) {
+    if ((results[idx]?.meta?.changes ?? 0) > 0) ctx.waitUntil(attachSimbriefPlan(env, ev));
+  }
 
   return json({ accepted: events.length, inserted_flights: insertedFlights });
 }

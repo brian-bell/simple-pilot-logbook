@@ -4,6 +4,8 @@
  * Each run writes:
  *   backups/YYYY-MM-DD/flights.csv  - the logbook, same format as GET /api/flights/export.csv
  *   backups/YYYY-MM-DD/flights.sql  - INSERT OR IGNORE statements for `flights`
+ *   backups/YYYY-MM-DD/flight_plans.sql - the same for `flight_plans` (SimBrief plans
+ *                                      cannot be fetched again later)
  *   backups/events/events-NNNNNN.sql - INSERT OR IGNORE statements for `events`, one
  *                                      object per EVENT_CHUNK rowids
  * then deletes daily folders older than RETENTION_DAYS.
@@ -31,16 +33,21 @@ const SQL_TYPE = { httpMetadata: { contentType: "application/sql; charset=utf-8"
 
 export async function runBackup(env: Env, now = new Date()): Promise<void> {
   const day = now.toISOString().slice(0, 10);
-  const [csv, sql] = await Promise.all([flightsCsv(env), flightsSql(env)]);
+  const [csv, sql, plans] = await Promise.all([
+    flightsCsv(env),
+    tableSql(env, "flights", "flights"),
+    tableSql(env, "flight_plans", "flight plans"),
+  ]);
   await Promise.all([
     env.BACKUPS.put(`${PREFIX}${day}/flights.csv`, csv, {
       httpMetadata: { contentType: "text/csv; charset=utf-8" },
     }),
     env.BACKUPS.put(`${PREFIX}${day}/flights.sql`, sql, SQL_TYPE),
+    env.BACKUPS.put(`${PREFIX}${day}/flight_plans.sql`, plans, SQL_TYPE),
   ]);
   const chunks = await backupEvents(env);
   const pruned = await pruneOldBackups(env, now);
-  console.log(`backup ${day}: ${csv.length} B csv, ${sql.length} B sql, ${chunks} event chunks, pruned ${pruned}`);
+  console.log(`backup ${day}: ${csv.length} B csv, ${sql.length} B sql, ${plans.length} B plans sql, ${chunks} event chunks, pruned ${pruned}`);
 }
 
 function sqlLiteral(value: unknown): string {
@@ -57,18 +64,20 @@ function insertLine(table: string, row: Record<string, unknown>): string {
   );
 }
 
-/** The whole flights table (small: one row per flight), paged by id. */
-async function flightsSql(env: Env): Promise<string> {
-  const out = [`-- Simple Pilot Logbook flights backup ${new Date().toISOString()}`];
-  let lastId = 0;
+/** A whole small table (at most one row per flight), paged by rowid. */
+async function tableSql(env: Env, table: "flights" | "flight_plans", label: string): Promise<string> {
+  const out = [`-- Simple Pilot Logbook ${label} backup ${new Date().toISOString()}`];
+  let lastRowid = 0;
   for (;;) {
-    const { results } = await env.DB.prepare("SELECT * FROM flights WHERE id > ?1 ORDER BY id LIMIT ?2")
-      .bind(lastId, FLIGHTS_PAGE)
+    const { results } = await env.DB.prepare(
+      `SELECT rowid AS _rowid, * FROM ${table} WHERE rowid > ?1 ORDER BY rowid LIMIT ?2`,
+    )
+      .bind(lastRowid, FLIGHTS_PAGE)
       .all<Record<string, unknown>>();
     const rows = results ?? [];
-    for (const row of rows) {
-      out.push(insertLine("flights", row));
-      lastId = Number(row.id);
+    for (const { _rowid, ...row } of rows) {
+      out.push(insertLine(table, row));
+      lastRowid = Number(_rowid);
     }
     if (rows.length < FLIGHTS_PAGE) return out.join("\n") + "\n";
   }

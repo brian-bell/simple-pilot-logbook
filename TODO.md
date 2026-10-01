@@ -1,7 +1,6 @@
 # Todo List
 
 * Secret management
-* Simbrief integration
 * Vatsim or BATC integration
 * Altitude corrected for pressure
 * Add elapsed time/air time/detect time warp/accel/etc

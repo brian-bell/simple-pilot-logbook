@@ -22,13 +22,13 @@ import type { Env } from "./types";
 const FLIGHT_ID_RE = /^\/api\/flights\/(\d{1,12})$/;
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) {
       return env.ASSETS.fetch(request);
     }
     try {
-      return await route(request, env, url);
+      return await route(request, env, ctx, url);
     } catch (err) {
       console.error("unhandled error", err);
       return json({ error: "internal error" }, 500);
@@ -40,7 +40,7 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(request: Request, env: Env, url: URL): Promise<Response> {
+async function route(request: Request, env: Env, ctx: ExecutionContext, url: URL): Promise<Response> {
   const method = request.method.toUpperCase();
   const path = url.pathname;
 
@@ -50,7 +50,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     return unauthorized();
   }
 
-  if (isIngest) return ingestEvents(request, env);
+  if (isIngest) return ingestEvents(request, env, ctx);
   if (method === "GET" && path === "/api/status") return getStatus(env);
   if (method === "GET" && path === "/api/flights") return listFlights(env, url.searchParams);
   if (method === "GET" && path === "/api/flights/export.csv") return exportFlightsCsv(env);

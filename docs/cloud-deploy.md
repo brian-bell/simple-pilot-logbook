@@ -61,6 +61,12 @@ All commands below run from the `worker/` directory.
 
    `AGENT_TOKEN` is what the local agent sends. `VIEWER_TOKEN` is what you type into the web UI.
 
+   Optional: to attach SimBrief flight plans to flights, also store your SimBrief pilot ID (shown in SimBrief's account settings). Without it the feature is off; see [architecture.md](architecture.md#simbrief-flight-plans).
+
+   ```powershell
+   npx wrangler secret put SIMBRIEF_USERID
+   ```
+
 8. Deploy:
 
    ```powershell
@@ -79,7 +85,7 @@ Two ways to get the logbook out of D1:
 
 - **Export CSV** in the web UI (or `GET /api/flights/export.csv` with the viewer token) downloads every flight as a CSV file.
 - A **nightly backup** runs at 03:30 UTC (cron trigger in `wrangler.jsonc`) and writes to the `simple-pilot-logbook-backups` R2 bucket:
-  - `backups/YYYY-MM-DD/flights.csv` and `backups/YYYY-MM-DD/flights.sql`: the whole logbook as CSV and as `INSERT OR IGNORE` statements. Days older than 30 are deleted by the same job.
+  - `backups/YYYY-MM-DD/flights.csv` and `backups/YYYY-MM-DD/flights.sql`: the whole logbook as CSV and as `INSERT OR IGNORE` statements. `flight_plans.sql` beside them holds the attached SimBrief plans, which cannot be fetched again. Days older than 30 are deleted by the same job.
   - `backups/events/events-NNNNNN.sql`: the raw event log as `INSERT OR IGNORE` statements, 5000 events per file. The log only grows, so it is backed up incrementally: each run rewrites only the file still filling up (and at most 20 files), which keeps a run within D1's per-invocation query limit however large the log gets. These files are never pruned.
 
 Browse backups in the Cloudflare dashboard under **R2 > simple-pilot-logbook-backups**, or download one:
@@ -88,7 +94,7 @@ Browse backups in the Cloudflare dashboard under **R2 > simple-pilot-logbook-bac
 npx wrangler r2 object get simple-pilot-logbook-backups/backups/2026-09-30/flights.sql --file flights.sql --remote
 ```
 
-Restore into a freshly created and migrated database (see One-time setup steps 3 and 4). `flights.sql` alone brings the logbook back; add the `events-*.sql` files too if you want the raw event history (any order; rows that already exist are skipped):
+Restore into a freshly created and migrated database (see One-time setup steps 3 and 4). `flights.sql` alone brings the logbook back (add `flight_plans.sql` for the SimBrief plans); add the `events-*.sql` files too if you want the raw event history (any order; rows that already exist are skipped):
 
 ```powershell
 npx wrangler d1 execute simple-pilot-logbook --remote --file flights.sql
