@@ -20,6 +20,7 @@ const AFTER_TAKEOFF_SLACK_MS = 5 * 60 * 1000;
 const ORIGIN_RADIUS_NM = 10;
 const MAX_FIXES = 1000;
 const MAX_ROUTE = 2000;
+const MAX_URL = 500;
 
 type Obj = Record<string, unknown>;
 
@@ -88,9 +89,7 @@ function insertPlan(db: D1Database, flightUuid: string, ofp: Obj, matchNote: str
 
   const generatedMs = parseTime(params.time_generated);
   const callsign = str(atc.callsign) ?? joinOrNull(str(general.icao_airline), str(general.flight_number));
-  const pdfLink = str(obj(files.pdf).link);
-  const directory = str(files.directory);
-  const pdfUrl = pdfLink && directory?.startsWith("https://") ? directory + pdfLink : null;
+  const pdfUrl = pdfUrlOf(files);
 
   const row: Record<string, string | number | null> = {
     flight_uuid: flightUuid,
@@ -100,7 +99,7 @@ function insertPlan(db: D1Database, flightUuid: string, ofp: Obj, matchNote: str
     origin_icao: str(obj(ofp.origin).icao_code),
     destination_icao: str(obj(ofp.destination).icao_code),
     alternate_icao: str(alternate.icao_code),
-    route: str(general.route)?.slice(0, MAX_ROUTE) ?? null,
+    route: str(general.route, MAX_ROUTE),
     cruise_altitude_ft: int(general.initial_altitude),
     aircraft_type: str(aircraft.icaocode) ?? str(aircraft.icao_code),
     aircraft_registration: str(aircraft.reg),
@@ -120,6 +119,15 @@ function insertPlan(db: D1Database, flightUuid: string, ofp: Obj, matchNote: str
     )
     .bind(...cols.map((c) => row[c]))
     .run();
+}
+
+/** HTTPS link to the OFP PDF: files.pdf.link is a file name under files.directory, or already absolute. */
+function pdfUrlOf(files: Obj): string | null {
+  const link = str(obj(files.pdf).link, MAX_URL);
+  if (!link) return null;
+  if (/^https?:\/\//i.test(link)) return link.startsWith("https://") ? link : null;
+  const directory = str(files.directory, MAX_URL);
+  return directory?.startsWith("https://") ? directory.replace(/\/?$/, "/") + link : null;
 }
 
 /** The navlog fixes, trimmed to what a route map needs. */
@@ -156,10 +164,10 @@ function list(v: unknown): unknown[] {
   return "0" in o ? Object.values(o) : [o];
 }
 
-function str(v: unknown): string | null {
+function str(v: unknown, max = 200): string | null {
   if (typeof v !== "string" && typeof v !== "number") return null;
   const s = String(v).trim();
-  return s === "" ? null : s.slice(0, 200);
+  return s === "" ? null : s.slice(0, max);
 }
 
 function num(v: unknown): number | null {

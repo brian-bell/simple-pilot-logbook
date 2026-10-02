@@ -287,7 +287,7 @@ function FlightPlanSection({ flight, plan }) {
 }
 
 /** Flight detail modal; overlay click, the close button and Escape all close it. */
-export function FlightModal({ flight, onClose }) {
+export function FlightModal({ flight, onClose, onUnauthorized }) {
   const [plan, setPlan] = useState(null);
 
   useEffect(() => {
@@ -297,16 +297,16 @@ export function FlightModal({ flight, onClose }) {
   }, [onClose]);
 
   // The list rows carry no plan; fetch the detail for it. Best effort: a failure
-  // just leaves the section out (a 401 is caught by the next poll).
+  // just leaves the section out, except a 401, which shows the sign-in overlay.
   useEffect(() => {
     let live = true;
     setPlan(null);
     apiFetch(`/api/flights/${flight.id}`)
       .then(res => (res.ok ? res.json() : null))
       .then(detail => { if (live && detail?.flight_plan) setPlan(detail.flight_plan); })
-      .catch(() => {});
+      .catch(err => { if (live && err instanceof UnauthorizedError) onUnauthorized("Token rejected. Enter a valid viewer token."); });
     return () => { live = false; };
-  }, [flight.id]);
+  }, [flight.id, onUnauthorized]);
 
   const dep = routeLabel(flight, "departure");
   const arr = routeLabel(flight, "arrival");
