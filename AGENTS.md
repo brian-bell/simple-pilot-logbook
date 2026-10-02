@@ -25,8 +25,8 @@ Use this file for repository-specific rules that help coding agents make safe ch
 - `agent/src/import_volanta.ts`: one-off Volanta history import (`npm run import:volanta`), sends `flight.import` events with ids `volanta:<key>`; dry run unless `--send`
 - `agent/service/SimplePilotLogbook.xml.template` plus `install_service.ps1` and `uninstall_service.ps1` at the repo root: WinSW service tooling (WinSW 2.12.0, SHA-256 pinned in the installer)
 - `worker/wrangler.jsonc`: Worker config (D1 binding `DB`, R2 binding `BACKUPS`, nightly cron, assets from `../frontend`, `run_worker_first: ["/api/*"]`)
-- `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`)
-- `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `export.ts` (CSV export), `backup.ts` (nightly D1 -> R2 backup, `scheduled` handler), `status.ts`, `db.ts`, `types.ts` (env, event types, JSON helpers)
+- `worker/migrations/*.sql`: D1 schema (`events`, `flights`, `agent_status`, `flight_plans`)
+- `worker/src/index.ts`: router + auth dispatch; `auth.ts`, `events.ts` (ingest), `flights.ts`, `export.ts` (CSV export), `backup.ts` (nightly D1 -> R2 backup, `scheduled` handler), `simbrief.ts` (best-effort SimBrief plan attachment on takeoff ingest), `status.ts`, `db.ts`, `types.ts` (env, event types, JSON helpers)
 - `worker/.dev.vars.example`: local dev tokens (`dev-agent` / `dev-viewer`)
 - `frontend/index.html` (import map + mount point), `frontend/style.css`, `frontend/js/*.js` (`main.js` entry, `app.js` state and polling, `components.js`, `hooks.js`, `html.js`, `api.js`, `format.js`, `sort.js`), `frontend/vendor/*.mjs` (pinned Preact, preact/hooks, htm)
 - `docs/architecture.md`, `docs/cloud-deploy.md`, `docs/service-install.md`: how it works; deploy and local dev; service install/remove
@@ -61,6 +61,7 @@ Use this file for repository-specific rules that help coding agents make safe ch
 ## Worker Guardrails
 - Every `/api/*` route requires a bearer token: `AGENT_TOKEN` only for `POST /api/events`, `VIEWER_TOKEN` for everything else. No cross-acceptance; an unset secret must fail closed.
 - Ingest is idempotent on event `id`. Keep the statement order in `events.ts`: guarded flight insert **before** the event insert, all inside one `env.DB.batch()`.
+- SimBrief attachment runs in `ctx.waitUntil` after the ingest batch and must never fail or delay ingest; it is off unless the `SIMBRIEF_USERID` secret is set, and never runs for `flight.import`.
 - Max 20 events per request (D1 free plan allows 50 queries per invocation).
 - Unless the task explicitly requires an API change, `GET /api/status`, `GET /api/flights`, `GET /api/flights/{id}` and `DELETE /api/flights/{id}` keep their current response shapes; adding fields is fine, renaming or removing is not.
 - Static assets are served by Cloudflare with `run_worker_first: ["/api/*"]`; keep the `env.ASSETS.fetch` fallthrough in `index.ts`.

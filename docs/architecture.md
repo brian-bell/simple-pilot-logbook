@@ -40,7 +40,7 @@ All `/api/*` routes require `Authorization: Bearer <token>` and return JSON. The
 | `GET` | `/api/status` | viewer | Live state + current flight (if airborne) |
 | `GET` | `/api/flights` | viewer | Paginated flight list (`?limit=&offset=`, default 100, max 500) |
 | `GET` | `/api/flights/export.csv` | viewer | Download every flight as CSV (backup) |
-| `GET` | `/api/flights/{id}` | viewer | Single flight detail |
+| `GET` | `/api/flights/{id}` | viewer | Single flight detail, plus `flight_plan` (the attached SimBrief plan or `null`) |
 | `DELETE` | `/api/flights/{id}` | viewer | Delete a flight entry (its events are kept) |
 
 The agent token is accepted only for `POST /api/events` and the viewer token only for the other routes. If a secret is unset, every request for that role is rejected.
@@ -122,10 +122,19 @@ The agent tries node-simconnect's auto-detection first (`SimConnect.cfg`, the na
 
 ## Storage
 
-- **D1** (`worker/migrations/`): `events` (append-only log of everything except heartbeats), `flights` (the logbook: the 17 original flight columns plus `aircraft_type`, `event_id` and `created_at`), `agent_status` (one row, overwritten by heartbeats).
+- **D1** (`worker/migrations/`): `events` (append-only log of everything except heartbeats), `flights` (the logbook: the 17 original flight columns plus `aircraft_type`, `event_id` and `created_at`), `agent_status` (one row, overwritten by heartbeats), `flight_plans` (SimBrief plans keyed by `flight_uuid`, see below).
 - **Agent outbox** (`agent/outbox.db`, `node:sqlite`): pending events with retry and dead-letter bookkeeping. Roughly hourly, undelivered `flight.position` rows older than 7 days and all but the newest 1,000 dead-lettered rows are pruned; landings are never pruned.
 
 The one-off importer for the pre-Cloudflare `backend/logbook.db` was retired with the Python agent; it is in git history at commit `84af342`.
+
+## SimBrief flight plans
+
+Best effort, Worker side only. With the `SIMBRIEF_USERID` secret set (the SimBrief pilot ID), the first delivery of each `flight.takeoff` fetches the pilot's **latest** OFP from `https://www.simbrief.com/api/xml.fetcher.php?userid=<id>&json=v2` in `ctx.waitUntil`, after the ingest batch commits. SimBrief only exposes the latest plan, so the fetch happens at takeoff and nothing can be attached later or back-filled.
+
+- **Accepted** when the plan was generated between 24 h before and 5 min after takeoff, and the departure ICAO equals the planned origin or the liftoff point is within 10 nm of it. A flight that started in the air skips the origin check (`match_note` says so).
+- **Stored** in `flight_plans`: callsign, origin/destination/alternate, route, cruise altitude, aircraft, planned distance, enroute time, block and trip fuel (in the OFP's units), the SimBrief-hosted PDF link (not archived) and a trimmed navlog (`plan_json`: `{"navlog": [{ident, type, lat, lon, altitude_ft, stage, via}]}`).
+- **Linked** to the logbook row through `flights.event_id` -> the landing event's `payload.flight_uuid`. `GET /api/flights/{id}` returns it as `flight_plan` with `navlog` parsed; the detail modal shows it and flags a landing at the alternate or elsewhere.
+- **Failures** (SimBrief down, no match) are logged as `simbrief <flight_uuid>: ...` in the Worker logs and never retried. Imported flights never get a plan.
 
 ## Volanta import
 

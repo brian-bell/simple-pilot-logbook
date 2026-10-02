@@ -434,7 +434,12 @@ h1 {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text);
+  overflow-wrap: anywhere; /* long SimBrief routes */
 }
+
+.detail-link { color: var(--accent); text-decoration: none; }
+.detail-link:hover { text-decoration: underline; }
+.plan-diverted { color: var(--yellow); }
 
 .detail-section {
   font-size: 11px;

@@ -137,7 +137,7 @@ export function App() {
       <${Toolbar} total=${logbook.total} onUnauthorized=${onUnauthorized} />
       ${table}
     </main>
-    ${selected && html`<${FlightModal} flight=${selected} onClose=${closeModal} />`}
+    ${selected && html`<${FlightModal} flight=${selected} onClose=${closeModal} onUnauthorized=${onUnauthorized} />`}
     ${!signedIn && html`<${SignIn} message=${authMessage} onSignIn=${onSignIn} />`}
   `;
 }

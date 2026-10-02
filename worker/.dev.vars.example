@@ -1,3 +1,6 @@
 # Copy to worker/.dev.vars for `wrangler dev`. Never commit .dev.vars.
 AGENT_TOKEN=dev-agent
 VIEWER_TOKEN=dev-viewer
+
+# Optional: SimBrief pilot ID (Account > Pilot ID) to attach flight plans.
+# SIMBRIEF_USERID=123456
